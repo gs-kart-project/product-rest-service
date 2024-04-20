@@ -8,6 +8,7 @@ import com.gskart.product.services.ICategoryService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -52,6 +53,7 @@ public class CategoryController {
         return categoryDtoResponse;
     }
 
+    @PreAuthorize("hasAnyAuthority('Developer','Admin')")
     @PostMapping("")
     public ResponseEntity<CategoryDto> addNew(@RequestBody CategoryDto categoryDto) {
         Category category = categoryMapper.dtoToEntity(categoryDto);
@@ -63,6 +65,7 @@ public class CategoryController {
         return new ResponseEntity<>(newCategoryDto, HttpStatusCode.valueOf(201));
     }
 
+    @PreAuthorize("hasAnyAuthority('Developer','Admin')")
     @PutMapping("/{id}")
     public ResponseEntity<CategoryDto> update(@RequestBody CategoryDto categoryDto, @PathVariable("id") Long id) throws CategoryNotFoundException {
         Category category = categoryMapper.dtoToEntity(categoryDto);
@@ -74,6 +77,7 @@ public class CategoryController {
         return new ResponseEntity<>(newCategoryDto, HttpStatusCode.valueOf(201));
     }
 
+    @PreAuthorize("hasAnyAuthority('Developer','Admin')")
     @DeleteMapping("/{id}")
     public ResponseEntity<String> delete(@PathVariable("id") Long id) throws CategoryNotFoundException {
         categoryService.delete(id);

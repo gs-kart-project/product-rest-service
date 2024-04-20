@@ -3,6 +3,7 @@ package com.gskart.product.services;
 import com.gskart.product.entities.Category;
 import com.gskart.product.exceptions.CategoryNotFoundException;
 import com.gskart.product.respositories.CategoryRepository;
+import com.gskart.product.security.models.GSKartResourceServerUserContext;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -14,8 +15,11 @@ import java.util.Optional;
 public class CategoryService implements ICategoryService{
     private final CategoryRepository categoryRepository;
 
-    public CategoryService(CategoryRepository categoryRepository) {
+    private final GSKartResourceServerUserContext resourceServerUserContext;
+
+    public CategoryService(CategoryRepository categoryRepository, GSKartResourceServerUserContext resourceServerUserContext) {
         this.categoryRepository = categoryRepository;
+        this.resourceServerUserContext = resourceServerUserContext;
     }
 
     @Override
@@ -32,6 +36,7 @@ public class CategoryService implements ICategoryService{
     @Override
     public Category save(Category category) {
         category.setCreatedOn(OffsetDateTime.now(ZoneOffset.UTC));
+        category.setCreatedBy(resourceServerUserContext.getGskartResourceServerUser().getUsername());
         category.setStatus(Category.Status.ACTIVE);
         return categoryRepository.save(category);
     }
@@ -49,6 +54,7 @@ public class CategoryService implements ICategoryService{
         existingCategory.setName(category.getName());
         existingCategory.setImageUrl(category.getImageUrl());
         existingCategory.setModifiedOn(OffsetDateTime.now(ZoneOffset.UTC));
+        existingCategory.setModifiedBy(resourceServerUserContext.getGskartResourceServerUser().getUsername());
         existingCategory.setStatus(category.getStatus());
 
         return categoryRepository.save(existingCategory);
@@ -63,6 +69,7 @@ public class CategoryService implements ICategoryService{
         Category category = optionalCategory.get();
         category.setStatus(Category.Status.DELETED);
         category.setModifiedOn(OffsetDateTime.now(ZoneOffset.UTC));
+        category.setModifiedBy(resourceServerUserContext.getGskartResourceServerUser().getUsername());
         categoryRepository.save(category);
         return true;
     }
