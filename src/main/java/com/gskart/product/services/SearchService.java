@@ -7,14 +7,17 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+@Service
 public class SearchService implements ISearchService {
 
     private final ProductRepository productRepository;
+
     public SearchService(ProductRepository productRepository) {
         this.productRepository = productRepository;
     }
