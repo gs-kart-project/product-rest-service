@@ -20,7 +20,7 @@ The Product Catalog Service is a core microservice responsible for managing prod
 
 ### Technology Stack
 
-- **Framework:** Spring Boot 4.0.3
+- **Framework:** Spring Boot 4.0.7
 - **Language:** Java 25
 - **Database:** MySQL
 - **Build Tool:** Maven
@@ -53,41 +53,43 @@ src/main/java/com/gskart/product/
 
 ## 🔌 REST API Endpoints
 
+All endpoints are versioned under `/api/v1`.
+
 ### Product Endpoints
 
 | Endpoint | Method | Purpose | Auth Required | Status Code |
 |----------|--------|---------|---------------|-------------|
-| `/products` | GET | Get all products | No | 200, 204 |
-| `/products/{id}` | GET | Get product by ID | No | 200, 204 |
-| `/products/category/{categoryId}` | GET | Get products by category | No | 200, 204 |
-| `/products/search` | GET | Search products by keyword | No | 200, 204 |
-| `/products/category/{categoryId}` | POST | Create new product | No | 201, 400, 500 |
-| `/products/{id}` | PUT | Update product | Yes* | 200, 400, 404 |
-| `/products/{id}` | DELETE | Delete product | Yes* | 200, 404 |
+| `/api/v1/products` | GET | Get all products | No | 200, 204 |
+| `/api/v1/products/{id}` | GET | Get product by ID | No | 200, 204 |
+| `/api/v1/products/category/{categoryId}` | GET | Get products by category | No | 200, 204 |
+| `/api/v1/products/search` | GET | Search products by keyword | No | 200, 400 |
+| `/api/v1/products/category/{categoryId}` | POST | Create new product | No | 201, 400, 500 |
+| `/api/v1/products/{id}` | PUT | Update product | Yes* | 200, 400, 404 |
+| `/api/v1/products/{id}` | DELETE | Delete product | Yes* | 200, 404 |
 
 ### Category Endpoints
 
 | Endpoint | Method | Purpose | Auth Required | Status Code |
 |----------|--------|---------|---------------|-------------|
-| `/categories` | GET | Get all categories | No | 200, 204 |
-| `/categories/{id}` | GET | Get category by ID | No | 200, 204 |
-| `/categories` | POST | Create new category | Yes* | 201, 400 |
-| `/categories/{id}` | PUT | Update category | Yes* | 201, 400 |
-| `/categories/{id}` | DELETE | Delete category | Yes* | 200, 404 |
+| `/api/v1/categories` | GET | Get all categories | No | 200, 204 |
+| `/api/v1/categories/{id}` | GET | Get category by ID | No | 200, 204 |
+| `/api/v1/categories` | POST | Create new category | Yes* | 201, 400 |
+| `/api/v1/categories/{id}` | PUT | Update category | Yes* | 201, 400 |
+| `/api/v1/categories/{id}` | DELETE | Delete category | Yes* | 200, 404 |
 
 **Auth Required:** * Requires 'Developer' or 'Admin' role
 
 ### Query Parameters
 
-**Search Endpoint (`GET /products/search`):**
+**Search Endpoint (`GET /api/v1/products/search`):**
 - `query` (required) - Search keyword
-- `page` (optional, default: 0) - Page number for pagination
-- `size` (optional, default: 10) - Number of results per page
+- `page` (optional, default: 0) - Page number for pagination, must be >= 0
+- `size` (optional, default: 10) - Number of results per page, must be between 1 and 100
 - `sort` (optional, default: "name:asc") - Sort field and direction (format: "field:direction")
 
 **Example:**
 ```
-GET /products/search?query=laptop&page=0&size=20&sort=price:desc
+GET /api/v1/products/search?query=laptop&page=0&size=20&sort=price:desc
 ```
 
 ## 📦 API Response Format
@@ -131,6 +133,12 @@ GET /products/search?query=laptop&page=0&size=20&sort=price:desc
 }
 ```
 
+### Request Validation
+
+Product/Category create and update requests are validated with Jakarta Bean Validation: `name` is
+required (non-blank) and `price` must be a non-negative number. Invalid requests return **400 Bad
+Request**. Search `page`/`size` query params are similarly validated (see above).
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -164,17 +172,21 @@ src/main/resources/db/migration/productDb/V1__DBInitialize.sql
 
 ### ✅ Completed Features
 
-- [x] Spring Boot 4.0.3 upgrade with proper Lombok configuration
+- [x] Spring Boot 4.0.7 upgrade with proper Lombok configuration
 - [x] Product CRUD operations
 - [x] Category CRUD operations
 - [x] Browse products by category
-- [x] Search products with pagination and sorting
+- [x] Search products with pagination, sorting, and a result-size cap
 - [x] Role-based access control (Admin/Developer)
-- [x] Exception handling with custom exceptions
-- [x] DTO mapping with ModelMapper
+- [x] Exception handling with custom exceptions, incl. 400 on validation failures
+- [x] DTO mapping with explicit mappers
 - [x] MySQL database integration
-- [x] Flyway database migrations
+- [x] Flyway database migrations (price stored as `DECIMAL(12,2)`)
 - [x] Spring Security integration
+- [x] `BigDecimal` for monetary fields
+- [x] SLF4J structured logging (no `System.out.println`)
+- [x] `/api/v1` URL versioning
+- [x] Per-request user context cleared via `finally` (no cross-request identity leak)
 
 ### 📊 PRD Compliance
 
@@ -200,22 +212,22 @@ src/main/resources/db/migration/productDb/V1__DBInitialize.sql
 
 **Get all products:**
 ```bash
-curl http://localhost:8080/products
+curl http://localhost:4010/api/v1/products
 ```
 
 **Get products by category:**
 ```bash
-curl http://localhost:8080/products/category/1
+curl http://localhost:4010/api/v1/products/category/1
 ```
 
 **Search products:**
 ```bash
-curl "http://localhost:8080/products/search?query=laptop&page=0&size=10&sort=price:desc"
+curl "http://localhost:4010/api/v1/products/search?query=laptop&page=0&size=10&sort=price:desc"
 ```
 
 **Get product by ID:**
 ```bash
-curl http://localhost:8080/products/1
+curl http://localhost:4010/api/v1/products/1
 ```
 
 ## 📝 Exception Handling
@@ -271,9 +283,11 @@ The service handles the following exceptions gracefully:
 Key Maven dependencies:
 - spring-boot-starter-data-jpa
 - spring-boot-starter-security
-- spring-boot-starter-web
+- spring-boot-starter-webmvc
+- spring-boot-starter-validation
 - mysql-connector-j
 - lombok
+- spring-boot-flyway
 - flyway-mysql
 
 ## 🤝 Contributing
@@ -290,7 +304,7 @@ For issues or questions, please refer to the project documentation or contact th
 
 ---
 
-**Last Updated:** March 1, 2026
-**Spring Boot Version:** 4.0.3
+**Last Updated:** June 30, 2026
+**Spring Boot Version:** 4.0.7
 **Java Version:** 25
 **Status:** ✅ Production Ready
