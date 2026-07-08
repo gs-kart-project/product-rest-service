@@ -7,23 +7,35 @@ import com.gskart.product.exceptions.ProductNotFoundException;
 import com.gskart.product.mappers.ProductMapper;
 import com.gskart.product.services.IProductService;
 import com.gskart.product.services.ISearchService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+@Validated
 @RestController
-@RequestMapping("/products")
+@RequestMapping("/api/v1/products")
 public class ProductsController {
+
+    // Whitelist of sortable fields; a client-supplied sort field outside this set is rejected
+    // (400) rather than reaching Spring Data, which would otherwise raise a 500 on an unknown
+    // property.
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("name", "price", "id");
 
     private final IProductService productService;
     private final ProductMapper productMapper;
@@ -106,8 +118,8 @@ public class ProductsController {
     @GetMapping("/search")
     public ResponseEntity<Map<String, Object>> searchProducts(
             @RequestParam("query") String query,
-            @RequestParam(value = "page", defaultValue = "0") int page,
-            @RequestParam(value = "size", defaultValue = "10") int size,
+            @RequestParam(value = "page", defaultValue = "0") @Min(0) int page,
+            @RequestParam(value = "size", defaultValue = "10") @Min(1) @Max(100) int size,
             @RequestParam(value = "sort", required = false, defaultValue = "name:asc") String sort) {
 
         // Parse sort parameter
@@ -116,6 +128,10 @@ public class ProductsController {
             String[] sortParts = sort.split(":");
             String sortField = sortParts[0];
             String sortDirection = sortParts.length > 1 ? sortParts[1] : "asc";
+            if (!ALLOWED_SORT_FIELDS.contains(sortField)) {
+                throw new IllegalArgumentException(
+                        String.format("Invalid sort field '%s'. Allowed values: %s", sortField, ALLOWED_SORT_FIELDS));
+            }
             sortProperties.put(sortField, sortDirection);
         } else {
             sortProperties.put("name", "asc");
@@ -125,23 +141,20 @@ public class ProductsController {
         Page<Product> productPage = searchService.searchProducts(query, page, size, sortProperties);
         List<ProductDto> productDtoList = productMapper.entityListToDtoList(productPage.getContent());
 
-        // Build response with pagination metadata
+        // Build response with pagination metadata. An empty result is a valid 200 with an empty
+        // list — returning 204 here would silently drop the pagination metadata body.
         Map<String, Object> response = new HashMap<>();
         response.put("products", productDtoList);
         response.put("currentPage", productPage.getNumber());
         response.put("totalItems", productPage.getTotalElements());
         response.put("totalPages", productPage.getTotalPages());
 
-        if (productDtoList.isEmpty()) {
-            return new ResponseEntity<>(response, HttpStatus.NO_CONTENT);
-        }
-
         return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
     @PostMapping(value = "/category/{categoryId}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public HttpEntity<?> addNew(
-            @RequestBody ProductDto productRequest,
+            @Valid @RequestBody ProductDto productRequest,
             @PathVariable("categoryId") Long categoryId){
         String productCreationFailedMessage = "Unable to create product. Check the request body";
         try {
@@ -167,35 +180,20 @@ public class ProductsController {
     @PreAuthorize("hasAnyAuthority('Developer','Admin')")
     @DeleteMapping("/{id}")
     public ResponseEntity<String> delete(@PathVariable("id") Long id) throws ProductNotFoundException {
-        Product product = this.productService.getById(id);
-        if (product == null) {
-            throw new ProductNotFoundException(String.format("Product with ID %d not found", id));
-        }
-        this.productService.update(product);
+        this.productService.delete(id);
         return new ResponseEntity<>(String.format("Product %d has been deleted successfully.", id), HttpStatus.OK);
     }
 
     @PreAuthorize("hasAnyAuthority('Developer','Admin')")
     @PutMapping("/{id}")
-    public ResponseEntity<ProductDto> update(@RequestBody ProductDto productDto, @PathVariable("id") Long id) throws ProductNotFoundException {
-        Product existingProduct = this.productService.getById(id);
-        if (existingProduct == null) {
-            throw new ProductNotFoundException(String.format("Product with ID %d not found", id));
-        }
-
+    public ResponseEntity<ProductDto> update(@Valid @RequestBody ProductDto productDto, @PathVariable("id") Long id) throws ProductNotFoundException {
         Product product = productMapper.dtoToEntity(productDto);
-        product.setId(id);
-        Product updatedProduct = this.productService.update(product);
-        ProductDto updatedProductDto = productMapper.entityToDto(updatedProduct);
-
-        if (updatedProductDto == null) {
-            return new ResponseEntity<>(HttpStatusCode.valueOf(400));
-        }
-        return new ResponseEntity<>(updatedProductDto, HttpStatusCode.valueOf(200));
+        Product updatedProduct = this.productService.update(id, product);
+        return new ResponseEntity<>(productMapper.entityToDto(updatedProduct), HttpStatus.OK);
     }
 
     @ExceptionHandler(value = ProductNotFoundException.class)
-    public ResponseEntity<String> productNotFoundExceptionHandler(ProductNotFoundException productNotFoundException) {
-        return new ResponseEntity<>(productNotFoundException.getMessage(), HttpStatus.NOT_FOUND);
+    public ProblemDetail productNotFoundExceptionHandler(ProductNotFoundException productNotFoundException) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, productNotFoundException.getMessage());
     }
 }

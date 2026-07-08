@@ -5,6 +5,7 @@ import com.gskart.product.entities.Category;
 import com.gskart.product.exceptions.CategoryNotFoundException;
 import com.gskart.product.mappers.CategoryMapper;
 import com.gskart.product.services.ICategoryService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
@@ -14,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/categories")
+@RequestMapping("/api/v1/categories")
 public class CategoryController {
 
     private final ICategoryService categoryService;
@@ -55,7 +56,7 @@ public class CategoryController {
 
     @PreAuthorize("hasAnyAuthority('Developer','Admin')")
     @PostMapping("")
-    public ResponseEntity<CategoryDto> addNew(@RequestBody CategoryDto categoryDto) {
+    public ResponseEntity<CategoryDto> addNew(@Valid @RequestBody CategoryDto categoryDto) {
         Category category = categoryMapper.dtoToEntity(categoryDto);
         Category newCategory = categoryService.save(category);
         CategoryDto newCategoryDto = categoryMapper.entityToDto(newCategory);
@@ -67,7 +68,7 @@ public class CategoryController {
 
     @PreAuthorize("hasAnyAuthority('Developer','Admin')")
     @PutMapping("/{id}")
-    public ResponseEntity<CategoryDto> update(@RequestBody CategoryDto categoryDto, @PathVariable("id") Long id) throws CategoryNotFoundException {
+    public ResponseEntity<CategoryDto> update(@Valid @RequestBody CategoryDto categoryDto, @PathVariable("id") Long id) throws CategoryNotFoundException {
         Category category = categoryMapper.dtoToEntity(categoryDto);
         Category newCategory = categoryService.update(id, category);
         CategoryDto newCategoryDto = categoryMapper.entityToDto(newCategory);

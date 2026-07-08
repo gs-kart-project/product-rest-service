@@ -55,8 +55,13 @@ public class ProductService implements IProductService {
     }
 
     @Override
-    public Product update(Product product) {
+    public Product update(Long id, Product product) {
         return null;
+    }
+
+    @Override
+    public boolean delete(Long id) {
+        return false;
     }
 
     @Override
