@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 
 @SpringBootTest
@@ -37,7 +38,7 @@ class ProductServiceApplicationTests {
 		Product product = new Product();
 		product.setName("Microwave Oven");
 		product.setDescription("Microwave oven, appliance that cooks food by means of high-frequency electromagnetic waves called microwaves.");
-		product.setPrice(90d);
+		product.setPrice(BigDecimal.valueOf(90));
 		product.setCategory(category);
 
 		/*if(category.getProducts() == null){
