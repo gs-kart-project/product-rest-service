@@ -8,6 +8,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -17,6 +18,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+@Slf4j
 @Component
 public class ResourceAuthorizationFilter extends OncePerRequestFilter {
 
@@ -41,7 +43,7 @@ public class ResourceAuthorizationFilter extends OncePerRequestFilter {
         try {
             ClaimsResponse claimsResponse = authService.getUserClaims(authHeader);
             if (claimsResponse == null) {
-                System.out.println("ResourceAuthorizationFilter.doFilterInternal - claims response is null.");
+                log.warn("ResourceAuthorizationFilter.doFilterInternal - claims response is null.");
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 return;
             }
@@ -57,9 +59,11 @@ public class ResourceAuthorizationFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
         }
         catch (Exception e) {
-            System.out.println("ResourceAuthorizationFilter.doFilterInternal - caught an exception. Details are provided below.");
-            e.printStackTrace();
+            log.error("ResourceAuthorizationFilter.doFilterInternal - caught an exception.", e);
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        }
+        finally {
+            resourceServerUserContext.clear();
         }
     }
 }

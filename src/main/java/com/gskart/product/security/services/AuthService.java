@@ -17,7 +17,7 @@ public class AuthService implements IAuthService {
     @Value("${gskart.service.auth}")
     private String baseUrl;
 
-    private final String tokenClaimsEndpoint = "/auth/token/claims";
+    private final String tokenClaimsEndpoint = "/api/v1/userinfo";
 
     private final RestTemplate restTemplate;
 
