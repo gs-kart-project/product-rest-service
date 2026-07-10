@@ -1,7 +1,9 @@
-package com.gskart.product.services;
+package com.gskart.product.search.elasticsearch;
 
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
-import com.gskart.product.search.ProductDocument;
+import com.gskart.product.search.ProductSearchResult;
+import com.gskart.product.services.ISearchService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -16,8 +18,12 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;
 
+// Only active ISearchService when gskart.search.engine=elasticsearch (the local default) - a
+// future OpenSearchSearchService would be gated the same way, both implementing the same port and
+// returning the engine-neutral ProductSearchResult so callers never see ES/OpenSearch types.
 @Service
-public class SearchService implements ISearchService {
+@ConditionalOnProperty(name = "gskart.search.engine", havingValue = "elasticsearch", matchIfMissing = true)
+public class ElasticsearchSearchService implements ISearchService {
 
     private static final String ACTIVE_STATUS = "ACTIVE";
 
@@ -30,12 +36,12 @@ public class SearchService implements ISearchService {
 
     private final ElasticsearchOperations elasticsearchOperations;
 
-    public SearchService(ElasticsearchOperations elasticsearchOperations) {
+    public ElasticsearchSearchService(ElasticsearchOperations elasticsearchOperations) {
         this.elasticsearchOperations = elasticsearchOperations;
     }
 
     @Override
-    public Page<ProductDocument> searchProducts(String query, int pageNo, int pageSize, Map<String, String> sortProperties) {
+    public Page<ProductSearchResult> searchProducts(String query, int pageNo, int pageSize, Map<String, String> sortProperties) {
         Pageable pageable = PageRequest.of(pageNo, pageSize, buildSort(sortProperties));
 
         Query esQuery = Query.of(q -> q.bool(b -> b
@@ -51,7 +57,10 @@ public class SearchService implements ISearchService {
                 .build();
 
         SearchHits<ProductDocument> hits = elasticsearchOperations.search(nativeQuery, ProductDocument.class);
-        List<ProductDocument> content = hits.getSearchHits().stream().map(SearchHit::getContent).toList();
+        List<ProductSearchResult> content = hits.getSearchHits().stream()
+                .map(SearchHit::getContent)
+                .map(this::toResult)
+                .toList();
         return new PageImpl<>(content, pageable, hits.getTotalHits());
     }
 
@@ -67,5 +76,17 @@ public class SearchService implements ISearchService {
                 ? Sort.Direction.DESC
                 : Sort.Direction.ASC;
         return Sort.by(direction, esField);
+    }
+
+    private ProductSearchResult toResult(ProductDocument document) {
+        ProductSearchResult result = new ProductSearchResult();
+        result.setProductId(document.getProductId());
+        result.setName(document.getName());
+        result.setDescription(document.getDescription());
+        result.setPrice(document.getPrice());
+        result.setImageUrl(document.getImageUrl());
+        result.setCategoryId(document.getCategoryId());
+        result.setCategoryName(document.getCategoryName());
+        return result;
     }
 }

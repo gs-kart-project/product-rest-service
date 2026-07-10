@@ -4,7 +4,7 @@ import com.gskart.product.DTOs.ProductDto;
 import com.gskart.product.entities.Product;
 import com.gskart.product.fakestore.DTOs.requests.ProductRequest;
 import com.gskart.product.fakestore.DTOs.responses.ProductResponse;
-import com.gskart.product.search.ProductDocument;
+import com.gskart.product.search.ProductSearchResult;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -75,28 +75,28 @@ public class ProductMapper {
         return productDtoList;
     }
 
-    public ProductDto documentToDto(ProductDocument document){
-        if(document == null){
+    public ProductDto searchResultToDto(ProductSearchResult searchResult){
+        if(searchResult == null){
             return null;
         }
 
         ProductDto productDto = new ProductDto();
-        productDto.setId(document.getProductId());
-        productDto.setCategoryId(document.getCategoryId());
-        productDto.setName(document.getName());
-        productDto.setDescription(document.getDescription());
-        productDto.setImageUrl(document.getImageUrl());
-        productDto.setPrice(document.getPrice());
+        productDto.setId(searchResult.getProductId());
+        productDto.setCategoryId(searchResult.getCategoryId());
+        productDto.setName(searchResult.getName());
+        productDto.setDescription(searchResult.getDescription());
+        productDto.setImageUrl(searchResult.getImageUrl());
+        productDto.setPrice(searchResult.getPrice());
         return productDto;
     }
 
-    public List<ProductDto> documentListToDtoList(List<ProductDocument> documentList){
-        if(documentList == null){
+    public List<ProductDto> searchResultListToDtoList(List<ProductSearchResult> searchResultList){
+        if(searchResultList == null){
             return null;
         }
-        List<ProductDto> productDtoList = new ArrayList<>(documentList.size());
-        for(ProductDocument document : documentList){
-            productDtoList.add(documentToDto(document));
+        List<ProductDto> productDtoList = new ArrayList<>(searchResultList.size());
+        for(ProductSearchResult searchResult : searchResultList){
+            productDtoList.add(searchResultToDto(searchResult));
         }
 
         return productDtoList;

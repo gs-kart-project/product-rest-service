@@ -5,7 +5,7 @@ import com.gskart.product.exceptionHandlers.GlobalExceptionHandler;
 import com.gskart.product.exceptions.ProductAddFailedException;
 import com.gskart.product.exceptions.ProductNotFoundException;
 import com.gskart.product.mappers.ProductMapper;
-import com.gskart.product.search.ProductDocument;
+import com.gskart.product.search.ProductSearchResult;
 import com.gskart.product.services.IProductService;
 import com.gskart.product.services.ISearchService;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,22 +71,22 @@ class ProductsControllerTest {
         return product;
     }
 
-    private ProductDocument document(Long id, String name, String price) {
-        ProductDocument document = new ProductDocument();
-        document.setProductId(id);
-        document.setName(name);
-        document.setDescription("desc");
-        document.setImageUrl("http://img/" + id);
-        document.setPrice(new BigDecimal(price));
-        return document;
+    private ProductSearchResult searchResult(Long id, String name, String price) {
+        ProductSearchResult searchResult = new ProductSearchResult();
+        searchResult.setProductId(id);
+        searchResult.setName(name);
+        searchResult.setDescription("desc");
+        searchResult.setImageUrl("http://img/" + id);
+        searchResult.setPrice(new BigDecimal(price));
+        return searchResult;
     }
 
     // ---- search ----
 
     @Test
     void searchReturns200WithPaginationMetadata() throws Exception {
-        Page<ProductDocument> page = new PageImpl<>(
-                List.of(document(1L, "Laptop", "999.99")), PageRequest.of(0, 10), 1);
+        Page<ProductSearchResult> page = new PageImpl<>(
+                List.of(searchResult(1L, "Laptop", "999.99")), PageRequest.of(0, 10), 1);
         when(searchService.searchProducts(anyString(), anyInt(), anyInt(), anyMap())).thenReturn(page);
 
         mockMvc.perform(get("/api/v1/products/search").param("query", "lap"))
@@ -100,7 +100,7 @@ class ProductsControllerTest {
 
     @Test
     void searchWithNoResultsReturns200WithEmptyList() throws Exception {
-        Page<ProductDocument> empty = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
+        Page<ProductSearchResult> empty = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
         when(searchService.searchProducts(anyString(), anyInt(), anyInt(), anyMap())).thenReturn(empty);
 
         mockMvc.perform(get("/api/v1/products/search").param("query", "nomatch"))

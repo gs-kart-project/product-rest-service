@@ -1,10 +1,10 @@
-package com.gskart.product.services;
+package com.gskart.product.search.elasticsearch;
 
 import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.MultiMatchQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.query_dsl.TermQuery;
-import com.gskart.product.search.ProductDocument;
+import com.gskart.product.search.ProductSearchResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -16,6 +16,7 @@ import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -26,15 +27,15 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class SearchServiceTest {
+class ElasticsearchSearchServiceTest {
 
     private ElasticsearchOperations elasticsearchOperations;
-    private SearchService searchService;
+    private ElasticsearchSearchService searchService;
 
     @BeforeEach
     void setUp() {
         elasticsearchOperations = mock(ElasticsearchOperations.class);
-        searchService = new SearchService(elasticsearchOperations);
+        searchService = new ElasticsearchSearchService(elasticsearchOperations);
     }
 
     @SuppressWarnings("unchecked")
@@ -126,10 +127,15 @@ class SearchServiceTest {
     }
 
     @Test
-    void returnsMappedPageFromSearchHits() {
+    void returnsMappedPageFromSearchHitsAsEngineNeutralResult() {
         ProductDocument document = new ProductDocument();
         document.setProductId(1L);
         document.setName("Laptop");
+        document.setDescription("desc");
+        document.setPrice(new BigDecimal("999.99"));
+        document.setImageUrl("http://img/1");
+        document.setCategoryId(3L);
+        document.setCategoryName("Electronics");
 
         SearchHit<ProductDocument> hit = mock(SearchHit.class);
         when(hit.getContent()).thenReturn(document);
@@ -140,9 +146,16 @@ class SearchServiceTest {
         when(elasticsearchOperations.search(any(org.springframework.data.elasticsearch.core.query.Query.class),
                 eq(ProductDocument.class))).thenReturn(hits);
 
-        Page<ProductDocument> result = searchService.searchProducts("lap", 0, 10, Map.of());
+        Page<ProductSearchResult> result = searchService.searchProducts("lap", 0, 10, Map.of());
 
-        assertThat(result.getContent()).containsExactly(document);
         assertThat(result.getTotalElements()).isEqualTo(1L);
+        ProductSearchResult mapped = result.getContent().get(0);
+        assertThat(mapped.getProductId()).isEqualTo(1L);
+        assertThat(mapped.getName()).isEqualTo("Laptop");
+        assertThat(mapped.getDescription()).isEqualTo("desc");
+        assertThat(mapped.getPrice()).isEqualTo(new BigDecimal("999.99"));
+        assertThat(mapped.getImageUrl()).isEqualTo("http://img/1");
+        assertThat(mapped.getCategoryId()).isEqualTo(3L);
+        assertThat(mapped.getCategoryName()).isEqualTo("Electronics");
     }
 }

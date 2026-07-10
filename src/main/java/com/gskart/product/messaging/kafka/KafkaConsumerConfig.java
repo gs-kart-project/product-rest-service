@@ -1,6 +1,7 @@
 package com.gskart.product.messaging.kafka;
 
 import org.apache.kafka.common.TopicPartition;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.kafka.autoconfigure.ConcurrentKafkaListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,7 +12,10 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.FixedBackOff;
 
+// Only active when gskart.messaging.broker=kafka (the local default) - an sns-sqs consumer would
+// bring its own config class gated on the same property.
 @Configuration
+@ConditionalOnProperty(name = "gskart.messaging.broker", havingValue = "kafka", matchIfMissing = true)
 public class KafkaConsumerConfig {
 
     // 3 retries, 1s apart, then to the DLT - keeps a transient ES outage from wedging the consumer

@@ -1,4 +1,4 @@
-package com.gskart.product.search;
+package com.gskart.product.search.elasticsearch;
 
 import lombok.Data;
 import org.springframework.data.annotation.Id;
@@ -11,11 +11,11 @@ import org.springframework.data.elasticsearch.annotations.MultiField;
 
 import java.math.BigDecimal;
 
-// versionType = EXTERNAL: ProductIndexer supplies its own monotonic version (the source event's
-// occurredOn, as epoch nanos) on every write; ES then atomically rejects (VersionConflictException)
-// any write whose version isn't strictly greater than what's currently indexed, so stale/reordered
-// deliveries are dropped by ES itself rather than relying solely on the indexer's own
-// read-then-write pre-check (m5 fix).
+// versionType = EXTERNAL: ElasticsearchProductIndexer supplies its own monotonic version (the
+// source event's occurredOn, as epoch nanos) on every write; ES then atomically rejects
+// (VersionConflictException) any write whose version isn't strictly greater than what's currently
+// indexed, so stale/reordered deliveries are dropped by ES itself rather than relying solely on
+// the indexer's own read-then-write pre-check (m5 fix).
 @Data
 @Document(indexName = "products", versionType = Document.VersionType.EXTERNAL)
 public class ProductDocument {
@@ -52,7 +52,8 @@ public class ProductDocument {
     private String imageUrl;
 
     // ACTIVE / DELETED - soft delete in the index mirrors the MySQL soft delete; search always
-    // filters to ACTIVE (see SearchService). Retained (not exposed) for future admin/reporting use.
+    // filters to ACTIVE (see ElasticsearchSearchService). Retained (not exposed) for future
+    // admin/reporting use.
     @Field(type = FieldType.Keyword)
     private String status;
 

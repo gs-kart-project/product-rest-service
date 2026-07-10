@@ -4,7 +4,7 @@ import com.gskart.product.DTOs.authService.ClaimsResponse;
 import com.gskart.product.DTOs.authService.RoleDto;
 import com.gskart.product.entities.Category;
 import com.gskart.product.entities.Product;
-import com.gskart.product.search.ProductDocument;
+import com.gskart.product.search.ProductSearchResult;
 import com.gskart.product.security.models.GSKartResourceServerUser;
 import com.gskart.product.security.models.GSKartResourceServerUserContext;
 import com.gskart.product.security.services.AuthService;
@@ -142,7 +142,7 @@ class ProductSearchPipelineIntegrationTest {
                 .atMost(Duration.ofSeconds(15))
                 .pollInterval(Duration.ofMillis(250))
                 .untilAsserted(() -> {
-                    Page<ProductDocument> results =
+                    Page<ProductSearchResult> results =
                             searchService.searchProducts("Widget", 0, 10, Map.of());
                     assertThat(results.getContent())
                             .anyMatch(doc -> doc.getProductId().equals(saved.getId()));

@@ -1,4 +1,4 @@
-package com.gskart.product.search;
+package com.gskart.product.search.elasticsearch;
 
 import com.gskart.product.events.ProductEvent;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,15 +19,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class ProductIndexerTest {
+class ElasticsearchProductIndexerTest {
 
     private ElasticsearchOperations elasticsearchOperations;
-    private ProductIndexer productIndexer;
+    private ElasticsearchProductIndexer productIndexer;
 
     @BeforeEach
     void setUp() {
         elasticsearchOperations = mock(ElasticsearchOperations.class);
-        productIndexer = new ProductIndexer(elasticsearchOperations);
+        productIndexer = new ElasticsearchProductIndexer(elasticsearchOperations);
     }
 
     private ProductEvent event(Instant occurredOn) {

@@ -5,7 +5,7 @@ import com.gskart.product.entities.Product;
 import com.gskart.product.exceptions.ProductAddFailedException;
 import com.gskart.product.exceptions.ProductNotFoundException;
 import com.gskart.product.mappers.ProductMapper;
-import com.gskart.product.search.ProductDocument;
+import com.gskart.product.search.ProductSearchResult;
 import com.gskart.product.services.IProductService;
 import com.gskart.product.services.ISearchService;
 import jakarta.validation.Valid;
@@ -140,8 +140,8 @@ public class ProductsController {
         }
 
         // Search products
-        Page<ProductDocument> productPage = searchService.searchProducts(query, page, size, sortProperties);
-        List<ProductDto> productDtoList = productMapper.documentListToDtoList(productPage.getContent());
+        Page<ProductSearchResult> productPage = searchService.searchProducts(query, page, size, sortProperties);
+        List<ProductDto> productDtoList = productMapper.searchResultListToDtoList(productPage.getContent());
 
         // Build response with pagination metadata. An empty result is a valid 200 with an empty
         // list — returning 204 here would silently drop the pagination metadata body.
