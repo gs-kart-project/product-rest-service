@@ -1,95 +1,148 @@
 package com.gskart.product.services;
 
-import com.gskart.product.entities.Product;
-import com.gskart.product.respositories.ProductRepository;
+import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
+import co.elastic.clients.elasticsearch._types.query_dsl.MultiMatchQuery;
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import co.elastic.clients.elasticsearch._types.query_dsl.TermQuery;
+import com.gskart.product.search.ProductDocument;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.elasticsearch.client.elc.NativeQuery;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchHits;
 
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SearchServiceTest {
 
-    private ProductRepository productRepository;
+    private ElasticsearchOperations elasticsearchOperations;
     private SearchService searchService;
 
     @BeforeEach
     void setUp() {
-        productRepository = mock(ProductRepository.class);
-        searchService = new SearchService(productRepository);
+        elasticsearchOperations = mock(ElasticsearchOperations.class);
+        searchService = new SearchService(elasticsearchOperations);
     }
 
-    private Pageable capturePageable(String query, Map<String, String> sort) {
-        Page<Product> page = new PageImpl<>(List.of());
-        when(productRepository.findAllByNameContainingOrDescriptionContaining(eq(query), eq(query), org.mockito.ArgumentMatchers.any()))
-                .thenReturn(page);
+    @SuppressWarnings("unchecked")
+    private SearchHits<ProductDocument> emptyHits() {
+        SearchHits<ProductDocument> hits = mock(SearchHits.class);
+        when(hits.getSearchHits()).thenReturn(List.of());
+        when(hits.getTotalHits()).thenReturn(0L);
+        return hits;
+    }
 
-        searchService.searchProducts(query, 0, 10, sort);
+    private NativeQuery capturedQuery(String query, int page, int size, Map<String, String> sort) {
+        SearchHits<ProductDocument> hits = emptyHits();
+        when(elasticsearchOperations.search(any(org.springframework.data.elasticsearch.core.query.Query.class),
+                eq(ProductDocument.class))).thenReturn(hits);
 
-        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        org.mockito.Mockito.verify(productRepository)
-                .findAllByNameContainingOrDescriptionContaining(eq(query), eq(query), captor.capture());
-        return captor.getValue();
+        searchService.searchProducts(query, page, size, sort);
+
+        ArgumentCaptor<org.springframework.data.elasticsearch.core.query.Query> captor =
+                ArgumentCaptor.forClass(org.springframework.data.elasticsearch.core.query.Query.class);
+        verify(elasticsearchOperations).search(captor.capture(), eq(ProductDocument.class));
+        return (NativeQuery) captor.getValue();
     }
 
     @Test
-    void buildsAscendingSortByDefault() {
-        Pageable pageable = capturePageable("laptop", Map.of("name", "asc"));
+    void searchAlwaysFiltersToActiveStatus() {
+        NativeQuery nativeQuery = capturedQuery("laptop", 0, 10, Map.of());
 
-        Sort.Order order = pageable.getSort().getOrderFor("name");
+        Query esQuery = nativeQuery.getQuery();
+        assertThat(esQuery.isBool()).isTrue();
+        BoolQuery boolQuery = esQuery.bool();
+        assertThat(boolQuery.filter()).hasSize(1);
+        TermQuery statusFilter = boolQuery.filter().get(0).term();
+        assertThat(statusFilter.field()).isEqualTo("status");
+        assertThat(statusFilter.value().stringValue()).isEqualTo("ACTIVE");
+    }
+
+    @Test
+    void searchUsesMultiMatchWithFuzzinessOnNameAndDescription() {
+        NativeQuery nativeQuery = capturedQuery("laptop", 0, 10, Map.of());
+
+        BoolQuery boolQuery = nativeQuery.getQuery().bool();
+        assertThat(boolQuery.must()).hasSize(1);
+        MultiMatchQuery multiMatch = boolQuery.must().get(0).multiMatch();
+        assertThat(multiMatch.fields()).containsExactlyInAnyOrder("name", "description");
+        assertThat(multiMatch.query()).isEqualTo("laptop");
+        assertThat(multiMatch.fuzziness()).isEqualTo("AUTO");
+    }
+
+    @Test
+    void relevanceDefaultLeavesSortUnspecified() {
+        NativeQuery nativeQuery = capturedQuery("laptop", 0, 10, Map.of());
+
+        assertThat(nativeQuery.getPageable().getSort().isUnsorted()).isTrue();
+    }
+
+    @Test
+    void nameSortMapsToKeywordSubfield() {
+        NativeQuery nativeQuery = capturedQuery("laptop", 0, 10, Map.of("name", "asc"));
+
+        Pageable pageable = nativeQuery.getPageable();
+        Sort.Order order = pageable.getSort().getOrderFor("name.keyword");
         assertThat(order).isNotNull();
         assertThat(order.getDirection()).isEqualTo(Sort.Direction.ASC);
-        assertThat(pageable.getPageNumber()).isEqualTo(0);
-        assertThat(pageable.getPageSize()).isEqualTo(10);
     }
 
     @Test
-    void buildsDescendingSortWhenDirectionStartsWithDesc() {
-        Pageable pageable = capturePageable("phone", Map.of("price", "desc"));
+    void priceSortDescending() {
+        NativeQuery nativeQuery = capturedQuery("laptop", 0, 10, Map.of("price", "desc"));
 
-        Sort.Order order = pageable.getSort().getOrderFor("price");
+        Sort.Order order = nativeQuery.getPageable().getSort().getOrderFor("price");
         assertThat(order).isNotNull();
         assertThat(order.getDirection()).isEqualTo(Sort.Direction.DESC);
     }
 
     @Test
-    void unknownDirectionFallsBackToAscending() {
-        Pageable pageable = capturePageable("tv", Map.of("name", "sideways"));
+    void idSortMapsToProductIdField() {
+        NativeQuery nativeQuery = capturedQuery("laptop", 0, 10, Map.of("id", "asc"));
 
-        Sort.Order order = pageable.getSort().getOrderFor("name");
+        Sort.Order order = nativeQuery.getPageable().getSort().getOrderFor("productId");
         assertThat(order).isNotNull();
-        assertThat(order.getDirection()).isEqualTo(Sort.Direction.ASC);
     }
 
     @Test
-    void emptyDirectionFallsBackToAscending() {
-        Pageable pageable = capturePageable("radio", java.util.Collections.singletonMap("name", ""));
+    void pageNumberAndSizeAreApplied() {
+        NativeQuery nativeQuery = capturedQuery("laptop", 2, 25, Map.of());
 
-        Sort.Order order = pageable.getSort().getOrderFor("name");
-        assertThat(order).isNotNull();
-        assertThat(order.getDirection()).isEqualTo(Sort.Direction.ASC);
+        assertThat(nativeQuery.getPageable().getPageNumber()).isEqualTo(2);
+        assertThat(nativeQuery.getPageable().getPageSize()).isEqualTo(25);
     }
 
     @Test
-    void returnsPageFromRepository() {
-        Product product = new Product();
-        product.setName("Laptop");
-        Page<Product> page = new PageImpl<>(List.of(product));
-        when(productRepository.findAllByNameContainingOrDescriptionContaining(eq("lap"), eq("lap"), org.mockito.ArgumentMatchers.any()))
-                .thenReturn(page);
+    void returnsMappedPageFromSearchHits() {
+        ProductDocument document = new ProductDocument();
+        document.setProductId(1L);
+        document.setName("Laptop");
 
-        Page<Product> result = searchService.searchProducts("lap", 0, 10, Map.of("name", "asc"));
+        SearchHit<ProductDocument> hit = mock(SearchHit.class);
+        when(hit.getContent()).thenReturn(document);
 
-        assertThat(result.getContent()).containsExactly(product);
+        SearchHits<ProductDocument> hits = mock(SearchHits.class);
+        when(hits.getSearchHits()).thenReturn(List.of(hit));
+        when(hits.getTotalHits()).thenReturn(1L);
+        when(elasticsearchOperations.search(any(org.springframework.data.elasticsearch.core.query.Query.class),
+                eq(ProductDocument.class))).thenReturn(hits);
+
+        Page<ProductDocument> result = searchService.searchProducts("lap", 0, 10, Map.of());
+
+        assertThat(result.getContent()).containsExactly(document);
+        assertThat(result.getTotalElements()).isEqualTo(1L);
     }
 }

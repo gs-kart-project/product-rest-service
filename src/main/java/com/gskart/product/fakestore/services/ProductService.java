@@ -96,6 +96,11 @@ public class ProductService implements IProductService {
         return null;
     }
 
+    @Override
+    public int reindexAll() {
+        return 0;
+    }
+
     private String getRandomCategory(){
         List<String> categories = new ArrayList<>();
         categories.add("electronics");

@@ -5,6 +5,7 @@ import com.gskart.product.exceptionHandlers.GlobalExceptionHandler;
 import com.gskart.product.exceptions.ProductAddFailedException;
 import com.gskart.product.exceptions.ProductNotFoundException;
 import com.gskart.product.mappers.ProductMapper;
+import com.gskart.product.search.ProductDocument;
 import com.gskart.product.services.IProductService;
 import com.gskart.product.services.ISearchService;
 import org.junit.jupiter.api.BeforeEach;
@@ -70,12 +71,22 @@ class ProductsControllerTest {
         return product;
     }
 
+    private ProductDocument document(Long id, String name, String price) {
+        ProductDocument document = new ProductDocument();
+        document.setProductId(id);
+        document.setName(name);
+        document.setDescription("desc");
+        document.setImageUrl("http://img/" + id);
+        document.setPrice(new BigDecimal(price));
+        return document;
+    }
+
     // ---- search ----
 
     @Test
     void searchReturns200WithPaginationMetadata() throws Exception {
-        Page<Product> page = new PageImpl<>(
-                List.of(product(1L, "Laptop", "999.99")), PageRequest.of(0, 10), 1);
+        Page<ProductDocument> page = new PageImpl<>(
+                List.of(document(1L, "Laptop", "999.99")), PageRequest.of(0, 10), 1);
         when(searchService.searchProducts(anyString(), anyInt(), anyInt(), anyMap())).thenReturn(page);
 
         mockMvc.perform(get("/api/v1/products/search").param("query", "lap"))
@@ -89,13 +100,24 @@ class ProductsControllerTest {
 
     @Test
     void searchWithNoResultsReturns200WithEmptyList() throws Exception {
-        Page<Product> empty = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
+        Page<ProductDocument> empty = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
         when(searchService.searchProducts(anyString(), anyInt(), anyInt(), anyMap())).thenReturn(empty);
 
         mockMvc.perform(get("/api/v1/products/search").param("query", "nomatch"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.products", hasSize(0)))
                 .andExpect(jsonPath("$.totalItems").value(0));
+    }
+
+    @Test
+    void searchDefaultSortIsRelevanceAndPassesEmptySortProperties() throws Exception {
+        when(searchService.searchProducts(anyString(), anyInt(), anyInt(), anyMap()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
+
+        mockMvc.perform(get("/api/v1/products/search").param("query", "lap"))
+                .andExpect(status().isOk());
+
+        verify(searchService).searchProducts(eq("lap"), eq(0), eq(10), eq(java.util.Map.of()));
     }
 
     @Test
@@ -287,5 +309,18 @@ class ProductsControllerTest {
 
         mockMvc.perform(get("/api/v1/products/search").param("query", "x").param("sort", ""))
                 .andExpect(status().isOk());
+    }
+
+    // ---- index jobs (backfill reindex) ----
+
+    @Test
+    void createIndexJobReturns202WithEnqueuedCount() throws Exception {
+        when(productService.reindexAll()).thenReturn(7);
+
+        mockMvc.perform(post("/api/v1/products/index-jobs"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.enqueued").value(7));
+
+        verify(productService).reindexAll();
     }
 }

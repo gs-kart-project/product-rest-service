@@ -4,11 +4,25 @@ import com.gskart.product.entities.Category;
 import com.gskart.product.entities.Product;
 import com.gskart.product.exceptions.ProductAddFailedException;
 import com.gskart.product.exceptions.ProductNotFoundException;
+import com.gskart.product.outbox.OutboxEvent;
+import com.gskart.product.outbox.OutboxEventReadyEvent;
+import com.gskart.product.outbox.OutboxEventRepository;
+import com.gskart.product.outbox.ProductOutboxEventFactory;
+import com.gskart.product.respositories.CategoryRepository;
 import com.gskart.product.respositories.ProductRepository;
 import com.gskart.product.security.models.GSKartResourceServerUser;
 import com.gskart.product.security.models.GSKartResourceServerUserContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -26,23 +40,50 @@ import static org.mockito.Mockito.when;
 class ProductServiceTest {
 
     private ProductRepository productRepository;
+    private CategoryRepository categoryRepository;
+    private OutboxEventRepository outboxEventRepository;
+    private ProductOutboxEventFactory productOutboxEventFactory;
+    private ApplicationEventPublisher applicationEventPublisher;
     private GSKartResourceServerUserContext userContext;
     private ProductService productService;
 
     @BeforeEach
     void setUp() {
         productRepository = mock(ProductRepository.class);
+        categoryRepository = mock(CategoryRepository.class);
+        outboxEventRepository = mock(OutboxEventRepository.class);
+        productOutboxEventFactory = mock(ProductOutboxEventFactory.class);
+        applicationEventPublisher = mock(ApplicationEventPublisher.class);
         userContext = mock(GSKartResourceServerUserContext.class);
-        productService = new ProductService(productRepository, userContext);
+        PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
+        when(transactionManager.getTransaction(any())).thenReturn(mock(TransactionStatus.class));
+        productService = new ProductService(productRepository, categoryRepository, outboxEventRepository,
+                productOutboxEventFactory, applicationEventPublisher, userContext, transactionManager);
 
         GSKartResourceServerUser user = mock(GSKartResourceServerUser.class);
         when(user.getUsername()).thenReturn("tester");
         when(userContext.getGskartResourceServerUser()).thenReturn(user);
+
+        // Default: factory returns a fresh persisted-looking outbox event for any product/category.
+        when(productOutboxEventFactory.forProduct(any(Product.class), any()))
+                .thenAnswer(inv -> outboxEventWithId(1L));
+        when(outboxEventRepository.save(any(OutboxEvent.class))).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    private OutboxEvent outboxEventWithId(Long id) {
+        OutboxEvent event = new OutboxEvent();
+        event.setId(id);
+        return event;
+    }
+
+    private Category category() {
+        Category category = new Category();
+        category.setId(3L);
+        category.setName("Electronics");
+        return category;
     }
 
     private Product existing() {
-        Category category = new Category();
-        category.setId(3L);
         Product product = new Product();
         product.setId(1L);
         product.setName("Old name");
@@ -50,7 +91,7 @@ class ProductServiceTest {
         product.setImageUrl("old-url");
         product.setPrice(new BigDecimal("10.00"));
         product.setStatus(Product.Status.ACTIVE);
-        product.setCategory(category);
+        product.setCategory(category());
         product.setCreatedBy("creator");
         product.setCreatedOn(OffsetDateTime.now().minusDays(1));
         return product;
@@ -58,15 +99,43 @@ class ProductServiceTest {
 
     @Test
     void addNewStampsAuditFieldsAndActiveStatus() throws ProductAddFailedException {
+        Category category = category();
         Product incoming = new Product();
         incoming.setName("New");
+        when(categoryRepository.findById(3L)).thenReturn(Optional.of(category));
         when(productRepository.save(any(Product.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Product saved = productService.addNew(incoming, 3L);
 
         assertThat(saved.getStatus()).isEqualTo(Product.Status.ACTIVE);
         assertThat(saved.getCreatedOn()).isNotNull();
+        assertThat(saved.getCategory()).isSameAs(category);
         verify(productRepository).save(incoming);
+    }
+
+    @Test
+    void addNewThrowsWhenCategoryMissing() {
+        when(categoryRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productService.addNew(new Product(), 99L))
+                .isInstanceOf(ProductAddFailedException.class);
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void addNewEnqueuesOutboxEventAndPublishesImmediateEvent() throws ProductAddFailedException {
+        Category category = category();
+        when(categoryRepository.findById(3L)).thenReturn(Optional.of(category));
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        productService.addNew(new Product(), 3L);
+
+        verify(productOutboxEventFactory).forProduct(any(Product.class), org.mockito.ArgumentMatchers.eq(category));
+        verify(outboxEventRepository).save(any(OutboxEvent.class));
+
+        ArgumentCaptor<OutboxEventReadyEvent> eventCaptor = ArgumentCaptor.forClass(OutboxEventReadyEvent.class);
+        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().getOutboxEventIds()).containsExactly(1L);
     }
 
     @Test
@@ -96,6 +165,7 @@ class ProductServiceTest {
         assertThat(updated.getModifiedBy()).isEqualTo("tester");
         assertThat(updated.getModifiedOn()).isNotNull();
         verify(productRepository).save(existing);
+        verify(productOutboxEventFactory).forProduct(existing, originalCategory);
     }
 
     @Test
@@ -119,6 +189,8 @@ class ProductServiceTest {
         assertThat(existing.getStatus()).isEqualTo(Product.Status.DELETED);
         assertThat(existing.getModifiedBy()).isEqualTo("tester");
         verify(productRepository).save(existing);
+        // the outbox snapshot is built after status flips to DELETED, so the indexer soft-deletes too
+        verify(productOutboxEventFactory).forProduct(existing, existing.getCategory());
     }
 
     @Test
@@ -155,5 +227,43 @@ class ProductServiceTest {
         List<Product> products = List.of(existing());
         when(productRepository.findAll()).thenReturn(products);
         assertThat(productService.getAll()).isEqualTo(products);
+    }
+
+    @Test
+    void reindexAllEnqueuesOutboxEventForEveryActiveProductWithoutImmediatePublish() {
+        List<Product> products = List.of(existing(), existing());
+        Page<Product> singlePage = new PageImpl<>(products, PageRequest.of(0, 200, Sort.by("id")), 2);
+        when(productRepository.findAll(any(Pageable.class))).thenReturn(singlePage);
+
+        int count = productService.reindexAll();
+
+        assertThat(count).isEqualTo(2);
+        verify(outboxEventRepository, org.mockito.Mockito.times(2)).save(any(OutboxEvent.class));
+        verify(applicationEventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void reindexAllPagesThroughMultipleBatches() {
+        // Mocked (not real PageImpl) Pages so hasNext() can be controlled independently of
+        // productRepository.findAll()'s batch size, without needing 200 real elements per page.
+        Page<Product> firstPage = mock(Page.class);
+        when(firstPage.iterator()).thenReturn(List.of(existing()).iterator());
+        when(firstPage.getNumberOfElements()).thenReturn(1);
+        when(firstPage.hasNext()).thenReturn(true);
+
+        Page<Product> secondPage = mock(Page.class);
+        when(secondPage.iterator()).thenReturn(List.of(existing()).iterator());
+        when(secondPage.getNumberOfElements()).thenReturn(1);
+        when(secondPage.hasNext()).thenReturn(false);
+
+        when(productRepository.findAll(PageRequest.of(0, 200, Sort.by("id")))).thenReturn(firstPage);
+        when(productRepository.findAll(PageRequest.of(1, 200, Sort.by("id")))).thenReturn(secondPage);
+
+        int count = productService.reindexAll();
+
+        assertThat(count).isEqualTo(2);
+        verify(outboxEventRepository, org.mockito.Mockito.times(2)).save(any(OutboxEvent.class));
+        verify(productRepository).findAll(PageRequest.of(0, 200, Sort.by("id")));
+        verify(productRepository).findAll(PageRequest.of(1, 200, Sort.by("id")));
     }
 }

@@ -4,6 +4,7 @@ import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -47,6 +48,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(value = IllegalArgumentException.class)
     public ProblemDetail illegalArgumentExceptionHandler(IllegalArgumentException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, exception.getMessage());
+    }
+
+    // Without this, a @PreAuthorize denial (e.g. a Customer calling an admin-only endpoint) falls
+    // through to the catch-all handler below and comes back as a 500, not the 403 CODING_STANDARDS
+    // calls for - the catch-all is otherwise the first handler broad enough to match
+    // AccessDeniedException (uncovered by the m8 authz test in ProductSearchPipelineIntegrationTest).
+    @ExceptionHandler(value = AccessDeniedException.class)
+    public ProblemDetail accessDeniedExceptionHandler(AccessDeniedException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "You do not have permission to perform this action.");
     }
 
     @ExceptionHandler(value = Exception.class)

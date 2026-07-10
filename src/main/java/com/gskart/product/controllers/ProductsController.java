@@ -5,6 +5,7 @@ import com.gskart.product.entities.Product;
 import com.gskart.product.exceptions.ProductAddFailedException;
 import com.gskart.product.exceptions.ProductNotFoundException;
 import com.gskart.product.mappers.ProductMapper;
+import com.gskart.product.search.ProductDocument;
 import com.gskart.product.services.IProductService;
 import com.gskart.product.services.ISearchService;
 import jakarta.validation.Valid;
@@ -34,8 +35,9 @@ public class ProductsController {
 
     // Whitelist of sortable fields; a client-supplied sort field outside this set is rejected
     // (400) rather than reaching Spring Data, which would otherwise raise a 500 on an unknown
-    // property.
-    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("name", "price", "id");
+    // property. "relevance" (the default) means ES's natural _score ordering - no sort applied.
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("relevance", "name", "price", "id");
+    private static final String RELEVANCE_SORT = "relevance";
 
     private final IProductService productService;
     private final ProductMapper productMapper;
@@ -120,9 +122,9 @@ public class ProductsController {
             @RequestParam("query") String query,
             @RequestParam(value = "page", defaultValue = "0") @Min(0) int page,
             @RequestParam(value = "size", defaultValue = "10") @Min(1) @Max(100) int size,
-            @RequestParam(value = "sort", required = false, defaultValue = "name:asc") String sort) {
+            @RequestParam(value = "sort", required = false, defaultValue = RELEVANCE_SORT) String sort) {
 
-        // Parse sort parameter
+        // Parse sort parameter. "relevance" means no explicit sort (ES's natural _score order).
         Map<String, String> sortProperties = new HashMap<>();
         if (sort != null && !sort.isEmpty()) {
             String[] sortParts = sort.split(":");
@@ -132,14 +134,14 @@ public class ProductsController {
                 throw new IllegalArgumentException(
                         String.format("Invalid sort field '%s'. Allowed values: %s", sortField, ALLOWED_SORT_FIELDS));
             }
-            sortProperties.put(sortField, sortDirection);
-        } else {
-            sortProperties.put("name", "asc");
+            if (!RELEVANCE_SORT.equals(sortField)) {
+                sortProperties.put(sortField, sortDirection);
+            }
         }
 
         // Search products
-        Page<Product> productPage = searchService.searchProducts(query, page, size, sortProperties);
-        List<ProductDto> productDtoList = productMapper.entityListToDtoList(productPage.getContent());
+        Page<ProductDocument> productPage = searchService.searchProducts(query, page, size, sortProperties);
+        List<ProductDto> productDtoList = productMapper.documentListToDtoList(productPage.getContent());
 
         // Build response with pagination metadata. An empty result is a valid 200 with an empty
         // list — returning 204 here would silently drop the pagination metadata body.
@@ -150,6 +152,19 @@ public class ProductsController {
         response.put("totalPages", productPage.getTotalPages());
 
         return new ResponseEntity<>(response, HttpStatus.OK);
+    }
+
+    /**
+     * Backfills the search index from MySQL by enqueuing an outbox UPSERT for every active
+     * product. Needed for products that existed before the ES pipeline was wired up. Modeled as
+     * creating an "index job" resource (POST .../index-jobs) rather than a verb in the URL, per
+     * the no-verbs-in-URLs REST convention.
+     */
+    @PreAuthorize("hasAnyAuthority('Developer','Admin')")
+    @PostMapping("/index-jobs")
+    public ResponseEntity<Map<String, Object>> createIndexJob() {
+        int count = productService.reindexAll();
+        return new ResponseEntity<>(Map.of("enqueued", count), HttpStatus.ACCEPTED);
     }
 
     @PostMapping(value = "/category/{categoryId}", consumes = MediaType.APPLICATION_JSON_VALUE)

@@ -4,6 +4,7 @@ import com.gskart.product.DTOs.ProductDto;
 import com.gskart.product.entities.Product;
 import com.gskart.product.fakestore.DTOs.requests.ProductRequest;
 import com.gskart.product.fakestore.DTOs.responses.ProductResponse;
+import com.gskart.product.search.ProductDocument;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -69,6 +70,33 @@ public class ProductMapper {
         List<ProductDto> productDtoList = new ArrayList<>(productList.size());
         for(Product product : productList){
             productDtoList.add(entityToDto(product));
+        }
+
+        return productDtoList;
+    }
+
+    public ProductDto documentToDto(ProductDocument document){
+        if(document == null){
+            return null;
+        }
+
+        ProductDto productDto = new ProductDto();
+        productDto.setId(document.getProductId());
+        productDto.setCategoryId(document.getCategoryId());
+        productDto.setName(document.getName());
+        productDto.setDescription(document.getDescription());
+        productDto.setImageUrl(document.getImageUrl());
+        productDto.setPrice(document.getPrice());
+        return productDto;
+    }
+
+    public List<ProductDto> documentListToDtoList(List<ProductDocument> documentList){
+        if(documentList == null){
+            return null;
+        }
+        List<ProductDto> productDtoList = new ArrayList<>(documentList.size());
+        for(ProductDocument document : documentList){
+            productDtoList.add(documentToDto(document));
         }
 
         return productDtoList;
