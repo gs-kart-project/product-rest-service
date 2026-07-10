@@ -1,0 +1,84 @@
+name: gskart-product                # local dev infra for product-rest-service only.
+                                      # Superseded by the centralized docker-compose.infra.yml (D9)
+                                      # once that exists at the gskart/ root.
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: product-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: productDb
+      MYSQL_USER: ${PRODUCT_DB_USER}
+      MYSQL_PASSWORD: ${PRODUCT_DB_PASSWORD}
+    volumes:
+      - product-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  elasticsearch:
+    # Pinned to match the elasticsearch-java client version bundled by Spring Data Elasticsearch
+    # 6.0.6 (SB 4.0.7) - that client sends ES 9.x-only compatibility headers, which an 8.x server
+    # rejects with a "media_type_header_exception".
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.2.8
+    container_name: product-elasticsearch
+    restart: unless-stopped
+    ports:
+      - "9200:9200"
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.enabled: "false"   # TLS optional locally (D9 scope); auth still required
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - product-es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -u elastic:${ELASTIC_PASSWORD} http://localhost:9200 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kafka:
+    # bitnami/kafka was pulled from Docker Hub's free tier (Bitnami moved to paid "Secure
+    # Images" in Aug 2025) — using the official Apache Kafka image instead, same KRaft+SASL setup.
+    image: apache/kafka:4.3.1
+    container_name: product-kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: controller,broker
+      KAFKA_LISTENERS: SASL_PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: SASL_PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: SASL_PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: SASL_PLAINTEXT:SASL_PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
+      # Broker default (3) can't be satisfied with a single broker, which silently breaks all
+      # consumer-group coordination (__consumer_offsets never gets created) - single-node dev only.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      # Double underscore escapes the literal "_" in "SASL_PLAINTEXT" so this maps to
+      # listener.name.sasl_plaintext.plain.sasl.jaas.config (not sasl.plaintext...).
+      KAFKA_LISTENER_NAME_SASL__PLAINTEXT_PLAIN_SASL_JAAS_CONFIG: >-
+        org.apache.kafka.common.security.plain.PlainLoginModule required
+        username="${KAFKA_USER}" password="${KAFKA_PASSWORD}"
+        user_${KAFKA_USER}="${KAFKA_PASSWORD}";
+      # The image's entrypoint requires KAFKA_OPTS to be non-empty whenever a SASL listener is
+      # present, even though JAAS is supplied inline above (not via a static login-config file).
+      KAFKA_OPTS: "-Dgskart.kafka.sasl.inline-jaas=true"
+    volumes:
+      - product-kafka-data:/var/lib/kafka/data
+
+volumes:
+  product-mysql-data:
+  product-es-data:
+  product-kafka-data:
