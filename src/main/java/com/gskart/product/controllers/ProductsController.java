@@ -167,6 +167,7 @@ public class ProductsController {
         return new ResponseEntity<>(Map.of("enqueued", count), HttpStatus.ACCEPTED);
     }
 
+    @PreAuthorize("hasAnyAuthority('Developer','Admin')")
     @PostMapping(value = "/category/{categoryId}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public HttpEntity<?> addNew(
             @Valid @RequestBody ProductDto productRequest,

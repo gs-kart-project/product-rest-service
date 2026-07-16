@@ -1,13 +1,10 @@
 package com.gskart.product.integration;
 
-import com.gskart.product.DTOs.authService.ClaimsResponse;
-import com.gskart.product.DTOs.authService.RoleDto;
 import com.gskart.product.entities.Category;
 import com.gskart.product.entities.Product;
 import com.gskart.product.search.ProductSearchResult;
 import com.gskart.product.security.models.GSKartResourceServerUser;
 import com.gskart.product.security.models.GSKartResourceServerUserContext;
-import com.gskart.product.security.services.AuthService;
 import com.gskart.product.services.ICategoryService;
 import com.gskart.product.services.ISearchService;
 import com.gskart.product.services.IProductService;
@@ -15,11 +12,13 @@ import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import jakarta.servlet.Filter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Page;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -34,12 +33,14 @@ import org.testcontainers.mysql.MySQLContainer;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -99,29 +100,38 @@ class ProductSearchPipelineIntegrationTest {
     @Autowired
     WebApplicationContext webApplicationContext;
 
-    // Replaces the real AuthService (which would otherwise call out to auth-rest-service) so the
-    // authz tests below can control the caller's role without a live auth service.
+    // Overrides the JWKS-backed decoder autoconfigured from jwk-set-uri, so tests that decode a
+    // real bearer token don't need a live auth-rest-service or a signed token.
     @MockitoBean
-    AuthService authService;
+    JwtDecoder jwtDecoder;
 
     // The service layer reads the current user off a ThreadLocal that's normally populated by
-    // ResourceAuthorizationFilter on each HTTP request (for createdBy/modifiedBy auditing); this
-    // test calls the service directly, so it has to seed that ThreadLocal itself.
+    // JwtUserContextFilter on each HTTP request (for createdBy/modifiedBy auditing); this test
+    // calls the service directly, so it has to seed that ThreadLocal itself.
     @BeforeEach
     void seedResourceServerUser() {
-        ClaimsResponse claims = new ClaimsResponse();
-        claims.setUsername("integration-test");
-        claims.setEmail("integration-test@gskart.local");
-        claims.setRoles(Set.of());
-        resourceServerUserContext.setGskartResourceServerUser(new GSKartResourceServerUser(claims));
+        resourceServerUserContext.setGskartResourceServerUser(
+                new GSKartResourceServerUser(jwtFor("integration-test", "integration-test@gskart.local", List.of()), List.of()));
     }
 
-    // Mirrors ResourceAuthorizationFilter's own finally-block cleanup (ADR-D14) - this test seeds
+    // Mirrors JwtUserContextFilter's own finally-block cleanup - this test seeds
     // the ThreadLocal directly (bypassing the filter that would normally clear it), so it has to
-    // clear it itself too (n11 fix).
+    // clear it itself too.
     @AfterEach
     void clearResourceServerUser() {
         resourceServerUserContext.clear();
+    }
+
+    private Jwt jwtFor(String username, String email, List<String> roles) {
+        Instant now = Instant.now();
+        return Jwt.withTokenValue("test-token")
+                .header("alg", "none")
+                .claim("sub", username)
+                .claim("email", email)
+                .claim("roles", roles)
+                .issuedAt(now)
+                .expiresAt(now.plusSeconds(300))
+                .build();
     }
 
     @Test
@@ -152,38 +162,38 @@ class ProductSearchPipelineIntegrationTest {
     // m8 fix: standalone MockMvc (used by ProductsControllerTest) has no security filters, so it
     // can't prove @PreAuthorize is actually enforced - only a full Spring context test can. Builds
     // MockMvc against the real WebApplicationContext with the real Spring Security filter chain
-    // (springSecurityFilterChain) attached, and swaps in a mocked AuthService so the caller's role
-    // is controllable without a live auth-rest-service.
+    // via the springSecurity() configurer, which also wires the jwt() post-processor below.
     private MockMvc securedMockMvc() {
-        Filter springSecurityFilterChain = webApplicationContext.getBean("springSecurityFilterChain", Filter.class);
         return MockMvcBuilders.webAppContextSetup(webApplicationContext)
-                .addFilters(springSecurityFilterChain)
+                .apply(springSecurity())
                 .build();
-    }
-
-    private ClaimsResponse claimsWithRole(String roleName) {
-        RoleDto role = new RoleDto();
-        role.setName(roleName);
-        ClaimsResponse claims = new ClaimsResponse();
-        claims.setUsername("authz-test-user");
-        claims.setEmail("authz-test-user@gskart.local");
-        claims.setRoles(Set.of(role));
-        return claims;
     }
 
     @Test
     void indexJobIsForbiddenForCallerWithoutDeveloperOrAdminRole() throws Exception {
-        when(authService.getUserClaims(anyString())).thenReturn(claimsWithRole("Customer"));
-
-        securedMockMvc().perform(post("/api/v1/products/index-jobs").header("Authorization", "Bearer test-token"))
+        securedMockMvc().perform(post("/api/v1/products/index-jobs")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("Customer"))))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     void indexJobSucceedsForCallerWithDeveloperRole() throws Exception {
-        when(authService.getUserClaims(anyString())).thenReturn(claimsWithRole("Developer"));
+        securedMockMvc().perform(post("/api/v1/products/index-jobs")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("Developer"))))
+                .andExpect(status().isAccepted());
+    }
 
-        securedMockMvc().perform(post("/api/v1/products/index-jobs").header("Authorization", "Bearer test-token"))
+    // The jwt() post-processor above injects authorities directly and bypasses both the decoder
+    // and the JwtAuthenticationConverter - it doesn't prove setAuthoritiesClaimName("roles") is
+    // wired correctly. This test drives a real bearer token through the full chain (mocked decoder,
+    // real converter) to prove the flat "roles" claim is what actually grants the authority.
+    @Test
+    void rolesClaimIsMappedToAnAuthorityByTheRealConverter() throws Exception {
+        when(jwtDecoder.decode("developer-token"))
+                .thenReturn(jwtFor("authz-test-user", "authz-test-user@gskart.local", List.of("Developer")));
+
+        securedMockMvc().perform(post("/api/v1/products/index-jobs")
+                        .header("Authorization", "Bearer developer-token"))
                 .andExpect(status().isAccepted());
     }
 }
