@@ -20,6 +20,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.math.BigDecimal;
 import java.util.List;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
@@ -165,11 +168,14 @@ class ProductsControllerTest {
     }
 
     @Test
-    void updateWithBlankNameReturns400() throws Exception {
+    void updateWithBlankNameReturns400WithStructuredErrorsList() throws Exception {
         mockMvc.perform(put("/api/v1/products/7")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"\",\"price\":12.50}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail", is("Validation failed")))
+                .andExpect(jsonPath("$.errors", hasSize(greaterThanOrEqualTo(1))))
+                .andExpect(jsonPath("$.errors", hasItem(containsString("name"))));
     }
 
     @Test

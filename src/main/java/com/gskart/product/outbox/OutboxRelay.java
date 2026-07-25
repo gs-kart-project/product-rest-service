@@ -2,6 +2,7 @@ package com.gskart.product.outbox;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gskart.product.events.ProductEvent;
+import com.gskart.product.messaging.DomainEvent;
 import com.gskart.product.messaging.DomainEventPublisher;
 import org.springframework.stereotype.Service;
 
@@ -34,7 +35,13 @@ public class OutboxRelay {
 
         try {
             ProductEvent event = objectMapper.readValue(claimed.getPayload(), ProductEvent.class);
-            domainEventPublisher.publish(claimed.getTopic(), event.getProductId().toString(), event);
+            DomainEvent domainEvent = DomainEvent.builder()
+                    .destination(claimed.getTopic())
+                    .key(event.getProductId().toString())
+                    .eventType(claimed.getAggregateType())
+                    .payload(event)
+                    .build();
+            domainEventPublisher.publish(domainEvent);
             outboxEventStore.markSent(outboxEventId);
         } catch (Exception publishFailure) {
             outboxEventStore.markFailedOrRetry(outboxEventId, publishFailure);

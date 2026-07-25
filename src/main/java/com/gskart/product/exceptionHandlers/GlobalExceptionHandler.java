@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-import java.util.stream.Collectors;
+import java.util.List;
 
 @Slf4j
 @ControllerAdvice
@@ -24,24 +24,23 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(value = MethodArgumentNotValidException.class)
     public ProblemDetail methodArgumentNotValidExceptionHandler(MethodArgumentNotValidException exception) {
-        // Surface only the per-field validation messages, not the framework's internal binding dump.
-        String details = exception.getBindingResult().getFieldErrors().stream()
+        // Surface the per-field messages as a machine-readable list under "errors", not a joined
+        // string, so clients can present them per field.
+        List<String> errors = exception.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
-                .collect(Collectors.joining("; "));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
-                details.isEmpty() ? "Request validation failed." : details);
-        problem.setTitle("Validation failed");
+                .toList();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed");
+        problem.setProperty("errors", errors);
         return problem;
     }
 
     @ExceptionHandler(value = ConstraintViolationException.class)
     public ProblemDetail constraintViolationExceptionHandler(ConstraintViolationException exception) {
-        String details = exception.getConstraintViolations().stream()
+        List<String> errors = exception.getConstraintViolations().stream()
                 .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
-                .collect(Collectors.joining("; "));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
-                details.isEmpty() ? "Request validation failed." : details);
-        problem.setTitle("Validation failed");
+                .toList();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed");
+        problem.setProperty("errors", errors);
         return problem;
     }
 
