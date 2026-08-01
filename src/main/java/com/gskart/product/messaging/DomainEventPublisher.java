@@ -1,7 +1,14 @@
 package com.gskart.product.messaging;
 
-// Port (ADR-D5): keeps callers off KafkaTemplate directly so the broker can be swapped (or this
-// can converge into gskart-commons, ADR-D16) without touching the outbox/service layer.
+/**
+ * Outbound messaging port. Publishes a {@link DomainEvent} to the broker synchronously — the call
+ * returns only once the broker has accepted the event, and throws if it did not, so the caller (the
+ * outbox relay) can decide whether to retry. A Kafka adapter implements this today; a different broker
+ * adapter can be swapped in by config later without touching callers.
+ */
 public interface DomainEventPublisher {
-    void publish(String topic, String key, Object payload);
+    /**
+     * @throws EventPublishException if the broker did not accept the event.
+     */
+    void publish(DomainEvent event);
 }

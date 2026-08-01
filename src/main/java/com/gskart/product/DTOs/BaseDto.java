@@ -2,13 +2,13 @@ package com.gskart.product.DTOs;
 
 import lombok.Data;
 
-import java.util.Date;
+import java.time.OffsetDateTime;
 
 @Data
 public class BaseDto {
     private  Long id;
     private String createdBy;
-    private Date createdOn;
+    private OffsetDateTime createdOn;
     private  String modifiedBy;
-    private Date modifiedOn;
+    private OffsetDateTime modifiedOn;
 }

@@ -1,33 +1,26 @@
 package com.gskart.product.security.models;
 
-import com.gskart.product.DTOs.authService.ClaimsResponse;
-import com.mysql.cj.util.StringUtils;
 import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.oauth2.jwt.Jwt;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Collections;
 
 @Getter
 public class GSKartResourceServerUser implements UserDetails {
-    private final ClaimsResponse claimsResponse;
+    private final String username;
+    private final Collection<? extends GrantedAuthority> authorities;
 
-    public GSKartResourceServerUser(ClaimsResponse claimsResponse) {
-        this.claimsResponse = claimsResponse;
+    public GSKartResourceServerUser(Jwt jwt, Collection<? extends GrantedAuthority> authorities) {
+        this.username = jwt.getSubject();
+        this.authorities = authorities == null ? Collections.emptyList() : authorities;
     }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        if(claimsResponse == null || claimsResponse.getRoles().isEmpty()) {
-            return new ArrayList<>();
-        }
-        Collection<GSKartRole> gsKartRoleList = claimsResponse.getRoles().stream()
-                .map(GSKartRole::new)
-                .toList();
-        return gsKartRoleList;
+        return authorities;
     }
 
     @Override
@@ -37,9 +30,9 @@ public class GSKartResourceServerUser implements UserDetails {
 
     @Override
     public String getUsername() {
-        return claimsResponse.getUsername();
+        return username;
     }
-    // ToDo isAccountNonExpired, isAccountNonLocked, isCredentialsNonExpired, isEnabled should be set in claims response
+
     @Override
     public boolean isAccountNonExpired() {
         return true;

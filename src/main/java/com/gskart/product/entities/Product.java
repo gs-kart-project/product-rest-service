@@ -4,6 +4,9 @@ import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -22,6 +25,9 @@ import java.math.BigDecimal;
 // DELETED=1) — a string literal 'DELETED' would be coerced to 0 by MySQL and invert the filter.
 @SQLRestriction("status <> 1")
 public class Product extends BaseEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private Long id;
     private String name;
     private String description;
     private String imageUrl;
