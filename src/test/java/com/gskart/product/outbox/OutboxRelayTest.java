@@ -36,6 +36,7 @@ class OutboxRelayTest {
         OutboxEvent event = new OutboxEvent();
         event.setId(1L);
         event.setTopic("product.events.v1");
+        event.setAggregateType("Product");
         event.setStatus(OutboxEvent.OutboxStatus.IN_PROGRESS);
         event.setPayload("{\"productId\":5,\"status\":\"ACTIVE\"}");
         return event;
@@ -62,6 +63,7 @@ class OutboxRelayTest {
         verify(domainEventPublisher).publish(captor.capture());
         assertThat(captor.getValue().getDestination()).isEqualTo("product.events.v1");
         assertThat(captor.getValue().getKey()).isEqualTo("5");
+        assertThat(captor.getValue().getEventType()).isEqualTo("Product");
         verify(outboxEventStore).markSent(1L);
         verify(outboxEventStore, never()).markFailedOrRetry(anyLong(), any());
     }

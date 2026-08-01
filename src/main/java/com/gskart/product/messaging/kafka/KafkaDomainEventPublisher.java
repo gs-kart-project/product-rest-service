@@ -45,6 +45,12 @@ public class KafkaDomainEventPublisher implements DomainEventPublisher {
         } catch (ExecutionException | TimeoutException e) {
             throw new EventPublishException(
                     "Failed to publish " + event.getEventType() + " event to " + event.getDestination(), e);
+        } catch (RuntimeException e) {
+            // Covers failures KafkaTemplate throws synchronously and unchecked - e.g. serialization
+            // errors or org.apache.kafka.common.errors.TimeoutException on send-buffer exhaustion -
+            // so nothing escapes the publish() port contract.
+            throw new EventPublishException(
+                    "Failed to publish " + event.getEventType() + " event to " + event.getDestination(), e);
         }
     }
 }
