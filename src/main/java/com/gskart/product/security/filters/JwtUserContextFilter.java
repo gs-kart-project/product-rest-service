@@ -9,7 +9,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -17,8 +16,11 @@ import java.io.IOException;
 /**
  * Populates the createdBy/modifiedBy ThreadLocal from the JWT the resource-server filter chain
  * already authenticated, so CategoryService/ProductService keep reading it unchanged.
+ *
+ * Not a {@code @Component}: it's wired into the chain explicitly via
+ * {@code SecurityConfig#addFilterAfter}, so component-scanning it too would double-register it
+ * with the servlet container.
  */
-@Component
 public class JwtUserContextFilter extends OncePerRequestFilter {
 
     private final GSKartResourceServerUserContext resourceServerUserContext;

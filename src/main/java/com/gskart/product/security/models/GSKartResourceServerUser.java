@@ -11,12 +11,10 @@ import java.util.Collections;
 @Getter
 public class GSKartResourceServerUser implements UserDetails {
     private final String username;
-    private final String email;
     private final Collection<? extends GrantedAuthority> authorities;
 
     public GSKartResourceServerUser(Jwt jwt, Collection<? extends GrantedAuthority> authorities) {
         this.username = jwt.getSubject();
-        this.email = jwt.getClaimAsString("email");
         this.authorities = authorities == null ? Collections.emptyList() : authorities;
     }
 

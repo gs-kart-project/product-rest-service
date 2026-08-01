@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Page;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -195,5 +196,36 @@ class ProductSearchPipelineIntegrationTest {
         securedMockMvc().perform(post("/api/v1/products/index-jobs")
                         .header("Authorization", "Bearer developer-token"))
                 .andExpect(status().isAccepted());
+    }
+
+    // Standalone MockMvc (used by ProductsControllerTest) has no security filters, so it can't
+    // prove the @PreAuthorize on POST /category/{categoryId} is actually enforced either - same gap
+    // as the index-jobs endpoint above, closed the same way.
+    @Test
+    void addProductIsForbiddenForCallerWithoutDeveloperOrAdminRole() throws Exception {
+        Category category = new Category();
+        category.setName("Guarded Category");
+        category.setDescription("Exercises the @PreAuthorize guard on POST /category/{id}");
+        category = categoryService.save(category);
+
+        securedMockMvc().perform(post("/api/v1/products/category/" + category.getId())
+                        .with(jwt().authorities(new SimpleGrantedAuthority("Customer")))
+                        .contentType(MediaType.APPLICATION_JSON_VALUE)
+                        .content("{\"name\":\"Guarded Product\",\"price\":9.99}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void addProductSucceedsForCallerWithDeveloperRole() throws Exception {
+        Category category = new Category();
+        category.setName("Allowed Category");
+        category.setDescription("Exercises the @PreAuthorize guard on POST /category/{id}");
+        category = categoryService.save(category);
+
+        securedMockMvc().perform(post("/api/v1/products/category/" + category.getId())
+                        .with(jwt().authorities(new SimpleGrantedAuthority("Developer")))
+                        .contentType(MediaType.APPLICATION_JSON_VALUE)
+                        .content("{\"name\":\"Allowed Product\",\"price\":9.99}"))
+                .andExpect(status().isCreated());
     }
 }
