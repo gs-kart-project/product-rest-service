@@ -54,7 +54,7 @@ public class OutboxRelayScheduler {
         }
     }
 
-    // Recovers rows a crash left stuck IN_PROGRESS between claim() and mark-outcome (M3 fix) -
+    // Recovers rows a crash left stuck IN_PROGRESS between claim() and mark-outcome -
     // without this, such a row is claimed forever and never republished or retried.
     @Scheduled(fixedDelayString = "${gskart.product.outbox.relay.stuck-recovery-delay-ms}")
     public void reclaimStuckInProgressEvents() {

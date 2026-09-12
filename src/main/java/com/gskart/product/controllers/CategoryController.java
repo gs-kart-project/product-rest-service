@@ -8,6 +8,7 @@ import com.gskart.product.services.ICategoryService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -86,7 +87,7 @@ public class CategoryController {
     }
 
     @ExceptionHandler(value = CategoryNotFoundException.class)
-    public ResponseEntity<String> categoryNotFoundExceptionHandler(CategoryNotFoundException categoryNotFoundException){
-        return new ResponseEntity<>(categoryNotFoundException.getMessage(), HttpStatus.NOT_FOUND);
+    public ProblemDetail categoryNotFoundExceptionHandler(CategoryNotFoundException categoryNotFoundException){
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, categoryNotFoundException.getMessage());
     }
 }

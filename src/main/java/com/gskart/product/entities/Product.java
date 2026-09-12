@@ -8,23 +8,20 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
+import com.gskart.commons.domain.BaseAuditEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.hibernate.annotations.SQLRestriction;
 
 import java.math.BigDecimal;
 
-// Lombok attributes
 @EqualsAndHashCode(callSuper = true)
 @Data
-//Db Attributes
 @Entity(name = "products")
-// Soft-deleted rows are excluded from every read (findById, findAll, findAllByCategoryId,
-// search) so a deleted product never surfaces through the API. `status` is persisted as the
-// enum ORDINAL (tinyint), so this must reference the ordinal of DELETED (Status: ACTIVE=0,
-// DELETED=1) — a string literal 'DELETED' would be coerced to 0 by MySQL and invert the filter.
+// Keeps deleted products out of every query automatically. Status is stored as a number (0=ACTIVE, 1=DELETED),
+// so this has to stay "<> 1" - writing 'DELETED' here gets coerced to 0 by MySQL and ends up hiding the wrong rows.
 @SQLRestriction("status <> 1")
-public class Product extends BaseEntity {
+public class Product extends BaseAuditEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Long id;

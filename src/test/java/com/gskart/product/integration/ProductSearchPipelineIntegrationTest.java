@@ -3,8 +3,9 @@ package com.gskart.product.integration;
 import com.gskart.product.entities.Category;
 import com.gskart.product.entities.Product;
 import com.gskart.product.search.ProductSearchResult;
-import com.gskart.product.security.models.GSKartResourceServerUser;
-import com.gskart.product.security.models.GSKartResourceServerUserContext;
+import com.gskart.commons.security.ClaimNames;
+import com.gskart.commons.security.GSKartResourceServerUser;
+import com.gskart.commons.security.GSKartResourceServerUserContext;
 import com.gskart.product.services.ICategoryService;
 import com.gskart.product.services.ISearchService;
 import com.gskart.product.services.IProductService;
@@ -45,10 +46,9 @@ import static org.springframework.security.test.web.servlet.setup.SecurityMockMv
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// Full write -> outbox -> Kafka -> ES -> /search pipeline against real infra (Testcontainers), as
-// opposed to the mocked unit tests elsewhere. Security (SASL/xpack) is exercised manually via the
-// docker-compose stack (see TRACKER.md) - this test uses plain containers so it stays fast and
-// focuses on the pipeline logic itself, not re-proving auth already covered manually.
+// Runs the real write -> outbox -> Kafka -> ES -> /search pipeline against actual containers,
+// not mocks. Skips SASL/xpack here since that's covered manually elsewhere - this just checks
+// the pipeline itself works end to end.
 @Testcontainers
 @SpringBootTest
 class ProductSearchPipelineIntegrationTest {
@@ -101,23 +101,21 @@ class ProductSearchPipelineIntegrationTest {
     @Autowired
     WebApplicationContext webApplicationContext;
 
-    // Overrides the JWKS-backed decoder autoconfigured from jwk-set-uri, so tests that decode a
-    // real bearer token don't need a live auth-rest-service or a signed token.
+    // Swaps out the real JWKS-backed decoder so a test token doesn't need a live auth-rest-service
+    // or an actually-signed token.
     @MockitoBean
     JwtDecoder jwtDecoder;
 
-    // The service layer reads the current user off a ThreadLocal that's normally populated by
-    // JwtUserContextFilter on each HTTP request (for createdBy/modifiedBy auditing); this test
-    // calls the service directly, so it has to seed that ThreadLocal itself.
+    // Services read the current user off a ThreadLocal that JwtUserContextFilter normally fills
+    // in per request. This test calls the service directly, so it has to fill it in itself.
     @BeforeEach
     void seedResourceServerUser() {
         resourceServerUserContext.setGskartResourceServerUser(
                 new GSKartResourceServerUser(jwtFor("integration-test", "integration-test@gskart.local", List.of()), List.of()));
     }
 
-    // Mirrors JwtUserContextFilter's own finally-block cleanup - this test seeds
-    // the ThreadLocal directly (bypassing the filter that would normally clear it), so it has to
-    // clear it itself too.
+    // This test sets the ThreadLocal directly instead of going through the filter, so it has to
+    // clear it too - the same cleanup the filter would normally do.
     @AfterEach
     void clearResourceServerUser() {
         resourceServerUserContext.clear();
@@ -127,9 +125,9 @@ class ProductSearchPipelineIntegrationTest {
         Instant now = Instant.now();
         return Jwt.withTokenValue("test-token")
                 .header("alg", "none")
-                .claim("sub", username)
-                .claim("email", email)
-                .claim("roles", roles)
+                .claim(ClaimNames.SUB, username)
+                .claim(ClaimNames.EMAIL, email)
+                .claim(ClaimNames.ROLES, roles)
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(300))
                 .build();
@@ -160,10 +158,9 @@ class ProductSearchPipelineIntegrationTest {
                 });
     }
 
-    // m8 fix: standalone MockMvc (used by ProductsControllerTest) has no security filters, so it
-    // can't prove @PreAuthorize is actually enforced - only a full Spring context test can. Builds
-    // MockMvc against the real WebApplicationContext with the real Spring Security filter chain
-    // via the springSecurity() configurer, which also wires the jwt() post-processor below.
+    // Standalone MockMvc (used by ProductsControllerTest) skips security filters entirely, so it
+    // can't prove @PreAuthorize actually blocks anyone - only a real Spring context can. This
+    // builds MockMvc with the real security filter chain wired in via springSecurity().
     private MockMvc securedMockMvc() {
         return MockMvcBuilders.webAppContextSetup(webApplicationContext)
                 .apply(springSecurity())
@@ -184,10 +181,9 @@ class ProductSearchPipelineIntegrationTest {
                 .andExpect(status().isAccepted());
     }
 
-    // The jwt() post-processor above injects authorities directly and bypasses both the decoder
-    // and the JwtAuthenticationConverter - it doesn't prove setAuthoritiesClaimName("roles") is
-    // wired correctly. This test drives a real bearer token through the full chain (mocked decoder,
-    // real converter) to prove the flat "roles" claim is what actually grants the authority.
+    // jwt() above hands authorities straight in, skipping the decoder and JwtAuthenticationConverter
+    // entirely - so it can't prove setAuthoritiesClaimName("roles") actually works. This test sends
+    // a real bearer token through the full chain instead, to prove the "roles" claim is what grants it.
     @Test
     void rolesClaimIsMappedToAnAuthorityByTheRealConverter() throws Exception {
         when(jwtDecoder.decode("developer-token"))
@@ -198,9 +194,8 @@ class ProductSearchPipelineIntegrationTest {
                 .andExpect(status().isAccepted());
     }
 
-    // Standalone MockMvc (used by ProductsControllerTest) has no security filters, so it can't
-    // prove the @PreAuthorize on POST /category/{categoryId} is actually enforced either - same gap
-    // as the index-jobs endpoint above, closed the same way.
+    // Same gap as the index-jobs test above: standalone MockMvc can't prove @PreAuthorize on
+    // POST /category/{categoryId} is enforced, so this uses the same real-security-chain fix.
     @Test
     void addProductIsForbiddenForCallerWithoutDeveloperOrAdminRole() throws Exception {
         Category category = new Category();

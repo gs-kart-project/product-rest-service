@@ -51,10 +51,6 @@ public class ProductsController {
         this.searchService = searchService;
     }
 
-    /**
-     * Gets all products. Default route to /products
-     * @return List of Product response
-     */
     @GetMapping("")
     public ResponseEntity<List<ProductDto>> getAll(){
         ResponseEntity<List<ProductDto>> allProductsResponse;
@@ -73,11 +69,6 @@ public class ProductsController {
     }
 
 
-    /**
-     * Gets product by ID
-     * @param id Product's id
-     * @return 200 with product. 204 if product is not available.
-     */
     @GetMapping("/{id}")
     public ResponseEntity<ProductDto> getProductById(@PathVariable("id") long id){
         Product product = this.productService.getById(id);
@@ -92,11 +83,6 @@ public class ProductsController {
         return productResponseEntity;
     }
 
-    /**
-     * Get products by category ID
-     * @param categoryId Category ID to filter products
-     * @return List of products in the specified category
-     */
     @GetMapping("/category/{categoryId}")
     public ResponseEntity<List<ProductDto>> getProductsByCategory(@PathVariable("categoryId") Long categoryId) {
         List<Product> products = this.productService.getByCategory(categoryId);
@@ -109,14 +95,6 @@ public class ProductsController {
         }
     }
 
-    /**
-     * Search products by keyword
-     * @param query Search keyword
-     * @param page Page number (default 0)
-     * @param size Page size (default 10)
-     * @param sort Sort field and direction (e.g., "name:asc" or "price:desc")
-     * @return Paginated list of products matching the search criteria
-     */
     @GetMapping("/search")
     public ResponseEntity<Map<String, Object>> searchProducts(
             @RequestParam("query") String query,
@@ -124,7 +102,6 @@ public class ProductsController {
             @RequestParam(value = "size", defaultValue = "10") @Min(1) @Max(100) int size,
             @RequestParam(value = "sort", required = false, defaultValue = RELEVANCE_SORT) String sort) {
 
-        // Parse sort parameter. "relevance" means no explicit sort (ES's natural _score order).
         Map<String, String> sortProperties = new HashMap<>();
         if (sort != null && !sort.isEmpty()) {
             String[] sortParts = sort.split(":");
@@ -139,12 +116,10 @@ public class ProductsController {
             }
         }
 
-        // Search products
         Page<ProductSearchResult> productPage = searchService.searchProducts(query, page, size, sortProperties);
         List<ProductDto> productDtoList = productMapper.searchResultListToDtoList(productPage.getContent());
 
-        // Build response with pagination metadata. An empty result is a valid 200 with an empty
-        // list — returning 204 here would silently drop the pagination metadata body.
+        // Empty result is still a 200 with an empty list - a 204 here would silently drop the pagination metadata.
         Map<String, Object> response = new HashMap<>();
         response.put("products", productDtoList);
         response.put("currentPage", productPage.getNumber());

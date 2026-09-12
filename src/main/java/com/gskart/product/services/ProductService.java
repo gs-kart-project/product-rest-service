@@ -10,7 +10,7 @@ import com.gskart.product.outbox.OutboxEventRepository;
 import com.gskart.product.outbox.ProductOutboxEventFactory;
 import com.gskart.product.respositories.CategoryRepository;
 import com.gskart.product.respositories.ProductRepository;
-import com.gskart.product.security.models.GSKartResourceServerUserContext;
+import com.gskart.commons.security.GSKartResourceServerUserContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -29,8 +29,7 @@ import java.util.List;
 @Service("gskartProductService")
 public class ProductService implements IProductService{
 
-    // Batch size for reindexAll's paged backfill (M2 fix) - keeps each transaction/row-set bounded
-    // instead of loading the whole catalog into memory and one giant transaction.
+    // Caps how much reindexAll loads per transaction, instead of the whole catalog at once.
     private static final int REINDEX_BATCH_SIZE = 200;
 
     private final ProductRepository productRepository;
@@ -83,8 +82,7 @@ public class ProductService implements IProductService{
             throw new ProductNotFoundException(String.format("Product with ID %d not found", id));
         }
 
-        // Copy only the client-editable fields; category, status and audit provenance
-        // (createdOn/createdBy) are preserved from the persisted row.
+        // Only the client-editable fields - category, status, and createdOn/createdBy stay as persisted.
         existingProduct.setName(product.getName());
         existingProduct.setDescription(product.getDescription());
         existingProduct.setPrice(product.getPrice());
@@ -104,8 +102,8 @@ public class ProductService implements IProductService{
             throw new ProductNotFoundException(String.format("Product with ID %d not found", id));
         }
 
-        // Soft delete: mark DELETED so @SQLRestriction hides it from all subsequent reads. The
-        // outbox event carries the same DELETED status, so the indexer soft-deletes the ES doc too.
+        // Soft delete - @SQLRestriction hides DELETED rows, and the outbox event's DELETED status
+        // soft-deletes the ES doc too.
         existingProduct.setStatus(Product.Status.DELETED);
         existingProduct.setModifiedOn(OffsetDateTime.now(ZoneOffset.UTC));
         existingProduct.setModifiedBy(resourceServerUserContext.getGskartResourceServerUser().getUsername());
@@ -132,10 +130,8 @@ public class ProductService implements IProductService{
 
     @Override
     public int reindexAll() {
-        // Bulk backfill: just enqueue PENDING rows and let the scheduled relay drain them at its
-        // normal cadence, rather than firing hundreds of immediate-publish tasks at once. Paged in
-        // bounded batches (M2 fix) - each batch is its own short REQUIRES_NEW transaction, rather
-        // than loading the whole catalog into memory and holding one giant transaction open.
+        // Enqueues PENDING rows for the scheduled relay to drain, instead of firing hundreds of
+        // immediate publishes. Paged in batches, each its own short transaction.
         int totalEnqueued = 0;
         int pageNumber = 0;
         Page<Product> page;

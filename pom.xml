@@ -17,7 +17,44 @@
 	<properties>
 		<java.version>25</java.version>
 	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>com.gskart</groupId>
+				<artifactId>gskart-commons-bom</artifactId>
+				<version>1.0.0-SNAPSHOT</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
 	<dependencies>
+		<dependency>
+			<groupId>com.gskart</groupId>
+			<artifactId>commons-security</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.gskart</groupId>
+			<artifactId>commons-web</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.gskart</groupId>
+			<artifactId>commons-domain</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.gskart</groupId>
+			<artifactId>commons-messaging</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.gskart</groupId>
+			<artifactId>commons-logging</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.gskart</groupId>
+			<artifactId>commons-observability</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
@@ -167,7 +204,7 @@
 					</excludes>
 				</configuration>
 			</plugin>
-			<!-- Coverage gate (D12): ≥85% line & branch on the controller + service layers. -->
+			<!-- Coverage gate (D12): ≥85% line & branch across the whole bundle. -->
 			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
@@ -193,13 +230,23 @@
 							<goal>check</goal>
 						</goals>
 						<configuration>
+							<!-- Class-file patterns, not packages - a BUNDLE rule's <includes> would
+							     match the bundle name instead and silently disable the rule. -->
+							<excludes>
+								<exclude>**/ProductServiceApplication.*</exclude>
+								<exclude>**/ServletInitializer.*</exclude>
+								<exclude>**/*Config.*</exclude>
+								<exclude>**/config/**</exclude>
+								<exclude>**/entities/**</exclude>
+								<exclude>**/DTOs/**</exclude>
+								<exclude>**/events/**</exclude>
+								<exclude>**/exceptions/**</exclude>
+								<!-- Superseded FakeStoreAPI client, unused; queued for deletion (item 24). -->
+								<exclude>**/fakestore/**</exclude>
+							</excludes>
 							<rules>
 								<rule>
 									<element>BUNDLE</element>
-									<includes>
-										<include>com.gskart.product.controllers.*</include>
-										<include>com.gskart.product.services.*</include>
-									</includes>
 									<limits>
 										<limit>
 											<counter>LINE</counter>

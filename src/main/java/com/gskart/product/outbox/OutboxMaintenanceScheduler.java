@@ -10,10 +10,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
-// Housekeeping for the outbox table (M4 fix): outbox_events gets one row per write and nothing
-// ever removed them, so it grows unbounded; this purges old SENT rows and periodically logs the
-// FAILED count so permanently-failed events (needing manual replay/reindex) don't rot silently
-// with no visibility.
+// outbox_events gets a new row on every write and nothing ever deletes them, so this job cleans
+// out old SENT rows on a schedule and logs how many are stuck FAILED, so those don't go unnoticed
+// and end up needing a manual replay/reindex.
 @Component
 public class OutboxMaintenanceScheduler {
 

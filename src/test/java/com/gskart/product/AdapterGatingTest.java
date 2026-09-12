@@ -1,7 +1,7 @@
 package com.gskart.product;
 
-import com.gskart.product.messaging.DomainEventPublisher;
-import com.gskart.product.messaging.kafka.KafkaDomainEventPublisher;
+import com.gskart.commons.messaging.DomainEventPublisher;
+import com.gskart.commons.messaging.autoconfigure.CommonsMessagingAutoConfiguration;
 import com.gskart.product.messaging.kafka.ProductEventListener;
 import com.gskart.product.search.ProductIndexer;
 import com.gskart.product.search.elasticsearch.ElasticsearchProductIndexer;
@@ -9,6 +9,7 @@ import com.gskart.product.search.elasticsearch.ElasticsearchSearchService;
 import com.gskart.product.search.elasticsearch.ProductDocument;
 import com.gskart.product.services.ISearchService;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,13 +21,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-// Proves the ADR-D5 seam contract that application.properties documents: under the local
-// defaults exactly one adapter is active per port, and selecting gskart.messaging.broker /
-// gskart.search.engine values with no shipped adapter (sns-sqs, opensearch) is NOT a no-op - it
-// leaves the port without a bean. *PortConsumer below stands in for the real consumers that
-// require the port via non-optional constructor injection (OutboxRelay, ProductsController,
-// ProductEventListener itself) to prove that absence fails the context fast, rather than the
-// service silently booting with no adapter wired up.
+// If the broker/search-engine config is set to something we haven't built an adapter for yet
+// (like opensearch), the app shouldn't quietly start broken - it should fail to start instead.
 class AdapterGatingTest {
 
     @Configuration
@@ -49,8 +45,8 @@ class AdapterGatingTest {
     }
 
     private final ApplicationContextRunner messagingRunner = new ApplicationContextRunner()
-            .withUserConfiguration(MessagingTestConfig.class, KafkaDomainEventPublisher.class,
-                    ProductEventListener.class);
+            .withConfiguration(AutoConfigurations.of(CommonsMessagingAutoConfiguration.class))
+            .withUserConfiguration(MessagingTestConfig.class, ProductEventListener.class);
 
     @Test
     void kafkaIsTheSoleMessagingAdapterWhenBrokerPropertyIsAbsent() {

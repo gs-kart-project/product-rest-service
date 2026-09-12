@@ -43,7 +43,7 @@ public class OutboxEvent {
     private OffsetDateTime sentOn;
 
     // Set when the row is claimed (PENDING -> IN_PROGRESS). Used to detect rows stuck IN_PROGRESS
-    // by a crash between claim and mark-outcome (OutboxEventStore#reclaimStuckInProgress, M3 fix).
+    // by a crash between claim and mark-outcome (see OutboxEventStore#reclaimStuckInProgress).
     private OffsetDateTime claimedOn;
 
     // Optimistic lock: the row's claim (PENDING -> IN_PROGRESS) is how the immediate AFTER_COMMIT

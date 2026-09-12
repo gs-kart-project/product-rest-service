@@ -14,7 +14,6 @@ import java.util.Optional;
 public interface ProductRepository extends CrudRepository<Product, Long>, PagingAndSortingRepository<Product, Long> {
     Optional<Product> findProductByCategory(Category category);
 
-    // Get all products by category ID
     List<Product> findAllByCategoryId(Long categoryId);
 
     // Bounded/paged variant for batch cascade operations (see CategoryService) that must not load

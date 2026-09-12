@@ -9,7 +9,7 @@ import com.gskart.product.outbox.OutboxEventRepository;
 import com.gskart.product.outbox.ProductOutboxEventFactory;
 import com.gskart.product.respositories.CategoryRepository;
 import com.gskart.product.respositories.ProductRepository;
-import com.gskart.product.security.models.GSKartResourceServerUserContext;
+import com.gskart.commons.security.GSKartResourceServerUserContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -29,7 +29,7 @@ import java.util.Optional;
 @Service
 public class CategoryService implements ICategoryService{
 
-    // Batch size for the category-delete cascade (M2 fix) - keeps each transaction/row-set bounded
+    // Batch size for the category-delete cascade - keeps each transaction/row-set bounded
     // instead of loading every product in the category into memory and one giant transaction.
     private static final int CASCADE_BATCH_SIZE = 200;
 
@@ -121,7 +121,7 @@ public class CategoryService implements ICategoryService{
 
     // Cascade: every still-active product under this category is soft-deleted too, each with its
     // own outbox event so the search index reflects the cascade (not just the DB). Paged in bounded
-    // batches (M2 fix), each its own short REQUIRES_NEW transaction, rather than loading every
+    // batches, each its own short REQUIRES_NEW transaction, rather than loading every
     // product in the category into memory and one giant transaction; each batch's outbox rows are
     // published as soon as that batch commits instead of waiting for the whole cascade to finish.
     // Deleted rows drop out of subsequent findAllByCategoryId calls (@SQLRestriction), so re-querying

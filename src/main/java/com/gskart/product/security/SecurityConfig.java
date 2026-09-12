@@ -1,16 +1,13 @@
 package com.gskart.product.security;
 
-import com.gskart.product.security.filters.JwtUserContextFilter;
-import com.gskart.product.security.models.GSKartResourceServerUserContext;
+import com.gskart.commons.security.ResourceServerHttpSecurityCustomizer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimNames;
@@ -18,10 +15,6 @@ import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
-import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
 import java.util.Arrays;
@@ -35,30 +28,8 @@ import java.util.List;
 public class SecurityConfig {
 
     /**
-     * Not component-scanned (see JwtUserContextFilter's javadoc): built here as the single place
-     * it's registered, via addFilterAfter below, so it isn't also auto-registered on the servlet
-     * container.
-     */
-    @Bean
-    public JwtUserContextFilter jwtUserContextFilter(GSKartResourceServerUserContext resourceServerUserContext) {
-        return new JwtUserContextFilter(resourceServerUserContext);
-    }
-
-    /** Maps the flat "roles" claim onto authorities, so hasAnyAuthority('Developer','Admin') keeps working. */
-    @Bean
-    public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
-        grantedAuthoritiesConverter.setAuthoritiesClaimName("roles");
-        grantedAuthoritiesConverter.setAuthorityPrefix("");
-
-        JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
-        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
-        return jwtAuthenticationConverter;
-    }
-
-    /**
-     * jwk-set-uri alone only validates signature + exp; explicitly adds iss and aud so a token
-     * signed by auth for a different issuer/client is rejected too.
+     * Adds iss/aud checks on top of jwk-set-uri's signature check. Kept here — commons-security
+     * ships no decoder.
      */
     @Bean
     public JwtDecoder jwtDecoder(
@@ -77,18 +48,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationConverter jwtAuthenticationConverter,
-                                                    JwtUserContextFilter jwtUserContextFilter) throws Exception {
-        http.cors(Customizer.withDefaults())
-                .csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests((authorizeRequests) -> {
-                    authorizeRequests.anyRequest().authenticated();
-                })
-                .oauth2ResourceServer(resourceServer -> resourceServer
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
-                .addFilterAfter(jwtUserContextFilter, BearerTokenAuthenticationFilter.class);
-
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                     ResourceServerHttpSecurityCustomizer defaults) throws Exception {
+        defaults.customize(http);
+        http.authorizeHttpRequests(authorizeRequests -> authorizeRequests.anyRequest().authenticated());
         return http.build();
     }
 }

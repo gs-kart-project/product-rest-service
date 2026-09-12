@@ -15,6 +15,6 @@ public interface IProductService {
     List<Product> getByCategory(Long categoryId);
 
     // Backfills the search index by enqueuing an outbox UPSERT for every currently-active
-    // product; returns the number enqueued. Used by the admin /reindex endpoint.
+    // product; returns the number enqueued. Used by the admin index-jobs endpoint.
     int reindexAll();
 }

@@ -10,12 +10,9 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 
-// Persistence-only operations for the outbox claim/publish/mark-outcome lifecycle, kept in a
-// separate Spring bean (not private methods on OutboxRelay) so each step below runs in its own
-// short transaction via normal @Transactional proxying - Spring can't intercept self-invoked
-// same-class method calls, so splitting claim from mark-outcome (M3, so the blocking Kafka send in
-// between never holds a DB connection/row lock) needs a real bean boundary, not just extracted
-// methods.
+// This lives in its own Spring bean, not as methods on OutboxRelay, because Spring can't make
+// @Transactional work on a class calling its own methods. Splitting it out this way also means the
+// blocking Kafka send in OutboxRelay never happens while holding a DB connection or row lock.
 @Component
 public class OutboxEventStore {
 
@@ -30,10 +27,9 @@ public class OutboxEventStore {
         this.maxAttempts = maxAttempts;
     }
 
-    // Claims the row (PENDING -> IN_PROGRESS) via the entity's @Version optimistic lock, so the
-    // immediate AFTER_COMMIT path and the scheduled fallback sweep can race for the same row
-    // without ever both publishing it: the loser's flush throws
-    // ObjectOptimisticLockingFailureException, which propagates to the caller.
+    // Uses the row's @Version lock so two things trying to claim the same event at once (the
+    // after-commit publish and the fallback sweep) can't both win - whichever loses gets an
+    // ObjectOptimisticLockingFailureException instead of the event getting published twice.
     @Transactional
     public OutboxEvent claim(Long outboxEventId) {
         OutboxEvent outboxEvent = outboxEventRepository.findById(outboxEventId).orElse(null);
@@ -67,9 +63,9 @@ public class OutboxEventStore {
         });
     }
 
-    // Recovery for rows left IN_PROGRESS by a crash between claim() and markSent/markFailedOrRetry
-    // (M3 fix): reclaims anything stuck past the grace period back to PENDING so the fallback sweep
-    // picks it up again.
+    // If the app crashes between claim() and marking the outcome, a row can get stuck IN_PROGRESS
+    // forever. This puts anything stuck past the grace period back to PENDING so the fallback
+    // sweep picks it up again.
     @Transactional
     public int reclaimStuckInProgress(OffsetDateTime claimedBefore) {
         List<OutboxEvent> stuck = outboxEventRepository.findByStatusAndClaimedOnBefore(

@@ -7,17 +7,16 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import com.gskart.commons.domain.BaseAuditEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.util.List;
 
-// Lombok attributes
 @EqualsAndHashCode(callSuper = true)
 @Data
-//Db Attributes
 @Entity(name = "categories")
-public class Category extends BaseEntity {
+public class Category extends BaseAuditEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Long id;

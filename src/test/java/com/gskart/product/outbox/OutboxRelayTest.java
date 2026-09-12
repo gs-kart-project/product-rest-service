@@ -1,8 +1,8 @@
 package com.gskart.product.outbox;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.gskart.product.messaging.DomainEvent;
-import com.gskart.product.messaging.DomainEventPublisher;
+import com.gskart.commons.messaging.DomainEvent;
+import com.gskart.commons.messaging.DomainEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
